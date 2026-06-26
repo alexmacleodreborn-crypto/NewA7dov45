@@ -1098,7 +1098,7 @@ with tab11:
             st.markdown(f"{icon} **{condition}** — Current: {value:.4f}")
 
     st.divider()
-    st.subheader("Developmental Milestones")
+    st.subheader("Developmental Milestones") 
     milestones = [
         (DOB_TICK,      "Birth",                    "All Phase 1 systems online"),
         (6400,          "Phase 3 — Early Cognition","Language seed, first words"),
