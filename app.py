@@ -336,9 +336,9 @@ PCSN_SYSTEMS = {
         ("NPC Behaviour","EQ_TOM_20","B_j(t+1) = B_j(t) + η·(obs - B_j(t))","NPC prediction"),
         ("Sandy's Law Pred","EQ_SANDY_21","I_pred(t) = predict(I(t-1), context(t))","Self-prediction"),
         ("Emotion Prediction","EQ_EMOT_07","E_pred(t) = f(context, memory, NPC)","Affective forecast"),
+        ("Language Prediction","EQ_LANG_12","L_pred(t) = P(next_word|context)","Next word"),
         ("World Model Update","EQ_WRLD_11","W(t+1) = W(t) + α·ResourceChange","World model"),
         ("Attention Prediction","EQ_ATTN_09","A_pred(t) = f(salience, goals, memory)","Attention alloc"),
-        ("Language Prediction","EQ_LANG_12","L_pred(t) = P(next_word|context)","Next word"),
     ],
     "Choice": [
         ("Planning Engine","EQ_PLAN_02","V(s) = R(s) + γ·max_a V(T(s,a))","Optimal action"),
@@ -684,4 +684,3 @@ with tabs[5]:
         df_eq = pd.DataFrame(CANONICAL_EQUATIONS, columns=["Eq_ID","Name","Formula","Variables","Status","Domain"])
         st.dataframe(df_eq, use_container_width=True, height=500)
     st.markdown("### 🐍 Python Code — Paste Directly")
-    code = f
