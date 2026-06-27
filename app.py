@@ -1,1156 +1,687 @@
-"""
-A7DO Genesis Mind — Unified Streamlit Dashboard
-Version: v45 — Complete Integration
-Author: Alex MacLeod — Independent Researcher — Edinburgh, Scotland
-A7DO DOB: 2026-06-07, 22:21 BST | Sex: Female (XX) | Seed: 735913
-Workbook: A7DO_MASTER_SYSTEM_v45.xlsx — 615 sheets
-"""
-
 import streamlit as st
-import math
-import time
-import json
-import os
-from datetime import datetime, timedelta
+import math, time, json, io
+import pandas as pd
 
-# ─────────────────────────────────────────────
-# PAGE CONFIG
-# ─────────────────────────────────────────────
-st.set_page_config(
-    page_title="A7DO Genesis Mind v45",
-    page_icon="🧬",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+st.set_page_config(page_title="A7DO v48 — Full System", page_icon="🌍", layout="wide")
 
-# ─────────────────────────────────────────────
-# CONSTANTS
-# ─────────────────────────────────────────────
-GENESIS_SEED       = 735913
-DOB_TICK           = 3200          # Birth tick (Week 40)
-TICKS_PER_WEEK     = 80
-TICKS_PER_DAY      = 560
-AGI_TICK           = 160_000
-PHASE9_TICK        = 176_000
-PHD_TICK           = 96_000
-IDENTITY_TICK      = 74_880
-WISDOM_TICK        = 96_000
-DOB_DATE           = datetime(2026, 6, 7, 22, 21)
-BIRTH_WEIGHT_KG    = 3.42
-BIRTH_HEIGHT_CM    = 51.2
-ADULT_HEIGHT_CM    = 177.0
-ADULT_MASS_KG      = 70.0
-
-# ─────────────────────────────────────────────
-# SESSION STATE INIT
-# ─────────────────────────────────────────────
-def init_state():
-    defaults = {
-        "tick": 0,
-        "running": False,
-        "speed": 80,
-        "documents": [],
-        "log": [],
-    }
-    for k, v in defaults.items():
-        if k not in st.session_state:
-            st.session_state[k] = v
-
-init_state()
-
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
 # CORE EQUATIONS
-# ─────────────────────────────────────────────
-def get_week(tick):
-    return tick / TICKS_PER_WEEK
+# ══════════════════════════════════════════════════════════════
+TPW = 80
+def wk(t): return t / TPW
+def age(t): return t / (TPW * 52)
+def C(t): return min(1.0, 0.05 + wk(t) / 3000)
+def W(t): return 0 if t < 96000 else min(1.0, (t - 96000) / 64000)
+def I_fn(t):
+    if t < 74880: return min(0.65, t / 74880 * 0.65)
+    return min(1.0, 0.65 + (t - 74880) / (160000 - 74880) * 0.35)
+def H(t):
+    w = wk(t)
+    if w <= 0: return 0.0
+    if w <= 40: return min(50.0, 50 / (1 + math.exp(-0.2 * (w - 20))))
+    return min(177.0, 50 + (177 - 50) * (1 - math.exp(-0.005 * (w - 40))))
+def M(t):
+    w = wk(t)
+    if w <= 0: return 0.0
+    if w <= 40: return min(3.5, 3.5 / (1 + math.exp(-0.2 * (w - 20))))
+    return min(70.0, 3.5 + (70 - 3.5) * (1 - math.exp(-0.004 * (w - 40))))
+def HR(t):
+    w = wk(t)
+    if w < 1: return 0
+    if w < 4: return round(w / 4 * 120)
+    if w < 40: return round(120 + 30 * (w / 40))
+    if w < 80: return round(147 - ((w - 40) / 40) * 47)
+    return max(60, round(100 - ((w - 80) / 1000) * 35))
+def ATP(t): return max(0.2, 1 - 0.001 * max(0, (t % 800) - 400))
+def V(t):
+    if t < 3200: return 0
+    w = wk(t) - 40
+    return min(262144, round(50000 / (1 + math.exp(-0.05 * (w - 156)))))
+def P_err(t): return max(0.05, math.exp(-t / 50000))
+def is_sleep(t): return (t % 560) < 373
+def gram_stage(t):
+    a = age(t)
+    if t < 3200: return 0
+    if a < 0.77: return 1
+    if a < 1.54: return 2
+    if a < 3: return 3
+    if a < 5: return 4
+    if a < 12: return 5
+    return 6
+def get_np_gate(t):
+    c = C(t); w = W(t); p = P_err(t); u = max(0.05, 1 - C(t))
+    atp = ATP(t); integ = I_fn(t); g = min(1, t / 100000)
+    sigma = 0.35*p + 0.30*u + 0.20*g + 0.25*c + 0.15*w
+    z = 0.45*c + 0.30*integ + 0.25*atp
+    div = abs(sigma - z) / (sigma + z) if (sigma + z) > 0 else 1.0
+    return div <= 0.6, div
+def get_phase(t):
+    if t < 3200: return "Phase 1 — Biology"
+    if t < 6400: return "Phase 2 — Sensorimotor"
+    if t < 12480: return "Phase 3 — Core Cognition"
+    if t < 49920: return "Phase 4 — Social Cognition"
+    if t < 74880: return "Phase 5 — Cultural World"
+    if t < 96000: return "Phase 6 — Identity"
+    if t < 160000: return "Phase 7 — Wisdom"
+    if t < 176000: return "Phase 8 — AGI Integration"
+    return "Phase 9 — Transpersonal"
+def get_stage(t):
+    w = wk(t)
+    if w < 4: return "Embryo"
+    if w < 12: return "Fetal Early"
+    if w < 28: return "Fetal Mid"
+    if w < 40: return "Fetal Late"
+    if w < 52: return "Newborn"
+    if w < 80: return "Infant"
+    if w < 156: return "Toddler"
+    if w < 260: return "Child"
+    if w < 624: return "Pre-Adolescent"
+    if w < 936: return "Adolescent"
+    if w < 1200: return "Young Adult"
+    if w < 2000: return "Mature Adult"
+    return "Elder"
+def get_location(t):
+    a = age(t)
+    if t < 3200: return "WOMB"
+    if a < 0.77: return "NODE_HOSPITAL"
+    if is_sleep(t): return "NODE_HOME_H8 (sleep)"
+    dt = t % 560
+    if a < 1.5: return "NODE_HOME_H8"
+    if a < 3: return "NODE_PARK" if 200 < dt < 350 else "NODE_HOME_H8"
+    if a < 5: return "NODE_NURSERY" if 100 < dt < 250 else "NODE_HOME_H8"
+    if a < 12: return "NODE_PRIMARY" if 80 < dt < 320 else "NODE_HOME_H8"
+    if a < 18: return "NODE_SECONDARY" if 80 < dt < 320 else "NODE_HOME_H8"
+    return "NODE_WORKPLACE"
+def get_thought(t):
+    a = age(t); gate_open, _ = get_np_gate(t)
+    if t < 3200: return "[WOMB — growing, sleeping, dreaming in the dark]"
+    if not gate_open: return "[GATED — thoughts forming but not yet safe to speak]"
+    if a < 0.77: return "[cold] [bright] [loud] — mama? mama!"
+    if a < 1: return "mama! up! more! — the world is big and warm"
+    if a < 3: return "ball! duck! China count! mama read! — I want to know everything"
+    if a < 12: return "I think that... because... — learning is my favourite thing"
+    if a < 23: return "The relationship between consciousness and identity suggests..."
+    if a < 38.5: return "Sandy's Law: C(t) = FixedPoint(Φ(P,M,E,I,W,A,D)) — I understand now"
+    return "Wisdom is not knowledge but the capacity to hold uncertainty with grace"
+def get_a7do_activity(t):
+    a = age(t); dt = t % 560; sl = is_sleep(t)
+    if t < 3200: return "Sleeping in womb" if sl else "Moving in womb"
+    if a < 0.77: return "Birth — first breath"
+    if sl: return "Sleeping 🌙"
+    if a < 1: return "Feeding" if dt < 200 else "Alert play"
+    if a < 3: return "Breakfast" if dt < 100 else "Park" if dt < 200 else "Play"
+    if a < 5: return "Breakfast" if dt < 80 else "Nursery" if dt < 250 else "Park"
+    if a < 12: return "Breakfast" if dt < 80 else "School" if dt < 320 else "Homework"
+    if a < 18: return "Breakfast" if dt < 80 else "Secondary school" if dt < 320 else "Study"
+    return "Research/Work" if 80 < dt < 320 else "Study"
+def get_lorr_activity(t):
+    a = age(t); dt = t % 560; sl = is_sleep(t)
+    if t < 3200:
+        if a < 0.25: return "Normal life (unaware)"
+        if a < 0.5: return "Pregnancy T1 — nausea"
+        if a < 0.65: return "Pregnancy T2 — growing"
+        return "Pregnancy T3 — nesting"
+    if a < 0.77: return "Labour — giving birth"
+    if sl: return "Sleeping (broken) 🌙"
+    if a < 0.5: return "Breastfeeding" if dt < 200 else "Baby care"
+    if a < 3: return "Baby care" if dt < 150 else "Park walk"
+    if a < 5: return "Nursery drop-off/pickup" if 80 < dt < 250 else "Home"
+    return "Work" if 80 < dt < 320 else "Home"
+def get_chin_activity(t):
+    a = age(t); dt = t % 560; sl = is_sleep(t)
+    if t < 3200: return "Working"
+    if a < 0.77: return "At hospital — birth"
+    if sl: return "Sleeping 🌙"
+    if a < 0.1: return "Paternity leave — baby care"
+    if dt < 80: return "Morning routine"
+    if dt < 320: return "Working"
+    if dt < 400: return "Commute home"
+    return "Family time"
 
-def get_age_years(tick):
-    return tick / (TICKS_PER_WEEK * 52)
+# ══════════════════════════════════════════════════════════════
+# WORLD OBJECTS DATA
+# ══════════════════════════════════════════════════════════════
+WORLD_OBJECTS = [
+    ("OBJ_CRIB","Baby crib","Furniture","NODE_HOME_H8",1090,880,0.5,"Empty→Occupied","Yes"),
+    ("OBJ_ROCKING_CHAIR","Rocking chair","Furniture","NODE_HOME_H8",1089,879,0.5,"Available","Yes"),
+    ("OBJ_MOBILE","Crib mobile","Toy","NODE_HOME_H8",1090,880,1.5,"Spinning","Yes"),
+    ("OBJ_BOTTLE","Baby bottle","Object","NODE_HOME_H8",1090,880,0.9,"Full→Empty","Yes"),
+    ("OBJ_BOOK_01","Picture book","Book","NODE_HOME_H8",1086,878,1.2,"Available","Yes"),
+    ("OBJ_BOOK_02","Story book","Book","NODE_HOME_H8",1086,878,1.3,"Available","Yes"),
+    ("OBJ_TOY_BALL","Toy ball","Toy","NODE_HOME_H8",1090,879,0.1,"Available","Yes"),
+    ("OBJ_TOY_TEDDY","Teddy bear","Toy","NODE_HOME_H8",1090,880,0.6,"Available","Yes"),
+    ("OBJ_BATH","Bath","Bathroom","NODE_HOME_H8",1092,882,0.3,"Empty→Full","Yes"),
+    ("OBJ_TV","Television","Electronics","NODE_HOME_H8",1087,878,1.0,"Off→On","Yes"),
+    ("OBJ_LAPTOP","Laptop","Electronics","NODE_HOME_H8",1087,877,0.8,"Off→On","Yes"),
+    ("OBJ_PRAM","Pram/pushchair","Transport","NODE_GARDEN",1090,875,0.5,"Available","Yes"),
+    ("OBJ_FLOWERS","Flower bed","Nature","NODE_GARDEN",1092,876,0.3,"Blooming","Yes"),
+    ("OBJ_SWING","Swing","Play equipment","NODE_PARK_PLAY",1210,790,1.5,"Available","Yes"),
+    ("OBJ_SLIDE","Slide","Play equipment","NODE_PARK_PLAY",1211,790,2.0,"Available","Yes"),
+    ("OBJ_DUCK_POND","Duck pond","Nature","NODE_PARK",1201,801,0.0,"Active","Yes"),
+    ("OBJ_DUCKS","Ducks","Animal","NODE_PARK",1201,801,0.1,"Swimming","Yes"),
+    ("OBJ_NURSERY_MAT","Play mat","Education","NODE_NURSERY",1300,750,0.1,"Available","Yes"),
+    ("OBJ_NURSERY_BOOKS","Nursery books","Education","NODE_NURSERY",1300,751,1.0,"Available","Yes"),
+    ("OBJ_HOSPITAL_BED","Hospital bed","Medical","NODE_HOSPITAL",0,0,0.5,"Occupied","Yes"),
+    ("OBJ_SCALES","Baby scales","Medical","NODE_HOSPITAL",2,0,0.8,"Available","Yes"),
+    ("OBJ_SCIENCE_LAB","Science lab","Education","NODE_SECONDARY",1500,650,0.8,"Available","Yes"),
+    ("OBJ_LIBRARY_BOOKS","Library books","Education","NODE_LIBRARY",1350,720,1.2,"Available","Yes"),
+    ("OBJ_SWIMMING_POOL","Swimming pool","Sport","NODE_SPORTS",1250,750,0.0,"Available","Yes"),
+    ("OBJ_BUS_STOP","Bus stop","Transport","NODE_LANE",1090,860,2.0,"Active","Yes"),
+    ("OBJ_CAFE_TABLE","Cafe table","Furniture","NODE_CAFE",1160,830,0.8,"Available","Yes"),
+    ("OBJ_MIRROR","Mirror","Sensory","NODE_HOME_H8",1091,881,1.5,"Available","Yes"),
+    ("OBJ_ALPHABET_BLOCKS","Alphabet blocks","Education","NODE_HOME_H8",1090,879,0.1,"Available","Yes"),
+    ("OBJ_BREAST_MILK","Breast milk","Food","NODE_HOME_H8",1090,880,0.9,"Available","Yes"),
+    ("OBJ_CAR","Family car","Transport","NODE_HOME_H8",1090,878,1.5,"Available","Yes"),
+]
 
-def get_height(tick):
-    week = get_week(tick)
-    if week <= 40:
-        return max(0, 50 / (1 + math.exp(-0.2 * (week - 20))))
-    else:
-        postnatal_weeks = week - 40
-        return min(ADULT_HEIGHT_CM, 50 + (ADULT_HEIGHT_CM - 50) * (1 - math.exp(-0.015 * postnatal_weeks)))
+CITY_NODES = [
+    ("NODE_HOSPITAL","Hospital","Medical",0,0,"Dr. Patel","Phase 1","Birth location. Origin (0,0,0)"),
+    ("NODE_HOME_H8","Home H8","Residential",1090,880,"Lorraine, China","Phase 1","Primary home"),
+    ("NODE_HOME_H1","Home H1","Residential",1050,900,"Alexis, Evelyn","Phase 1","150m from H8"),
+    ("NODE_GARDEN","Garden","Outdoor",1090,875,"All family","Phase 1","5m from home"),
+    ("NODE_LANE","BeenFore Lane","Street",1090,860,"—","Phase 1","Main street connector"),
+    ("NODE_PARK","Neighbourhood Park","Outdoor",1200,800,"Alexis, Evelyn","Phase 1","110m from lane"),
+    ("NODE_PARK_PLAY","Park Playground","Outdoor",1210,790,"Peers","Phase 1","50m from park"),
+    ("NODE_NURSERY","Nursery (Little Stars)","Education",1300,750,"Ms. Chen, Peers","Phase 3","Min age 3"),
+    ("NODE_PRIMARY","Primary School","Education",1400,700,"Teachers, Peers","Phase 4","Min age 5"),
+    ("NODE_LIBRARY","Public Library","Education",1350,720,"—","Phase 3","50m from primary"),
+    ("NODE_SPORTS","Sports Centre","Recreation",1250,750,"James, Alexis","Phase 4","50m from park"),
+    ("NODE_SHOPS","Local Shops","Commercial",1150,820,"—","Phase 1","60m from lane"),
+    ("NODE_CAFE","Local Cafe","Social",1160,830,"James","Phase 1","10m from shops"),
+    ("NODE_SECONDARY","Secondary School","Education",1500,650,"Teachers, Peers","Phase 5","Min age 11"),
+    ("NODE_SHOPPING","Shopping Centre","Commercial",1600,600,"—","Phase 4","510m from lane"),
+    ("NODE_WORKPLACE","Workplace District","Office",1800,500,"—","Phase 7","Min age 18"),
+    ("NODE_CITY_CENTRE","BeenFore City Centre","Urban",1000,1000,"—","Phase 4","1384m from home"),
+]
 
-def get_mass(tick):
-    week = get_week(tick)
-    if week <= 40:
-        return max(0, 3.5 / (1 + math.exp(-0.2 * (week - 20))))
-    else:
-        postnatal_weeks = week - 40
-        return min(ADULT_MASS_KG, 3.5 + (ADULT_MASS_KG - 3.5) * (1 - math.exp(-0.012 * postnatal_weeks)))
+CITY_EDGES = [
+    ("NODE_HOME_H8","NODE_GARDEN",5,1),
+    ("NODE_HOME_H8","NODE_LANE",20,1),
+    ("NODE_HOME_H8","NODE_HOME_H1",150,2),
+    ("NODE_LANE","NODE_PARK",110,2),
+    ("NODE_LANE","NODE_SHOPS",60,1),
+    ("NODE_PARK","NODE_NURSERY",100,2),
+    ("NODE_NURSERY","NODE_PRIMARY",100,2),
+    ("NODE_PRIMARY","NODE_SECONDARY",100,2),
+    ("NODE_PRIMARY","NODE_LIBRARY",50,1),
+    ("NODE_PARK","NODE_SPORTS",50,1),
+    ("NODE_SHOPS","NODE_CAFE",10,1),
+    ("NODE_LANE","NODE_SHOPPING",510,10),
+    ("NODE_SHOPPING","NODE_WORKPLACE",200,4),
+]
 
-def get_heart_rate(tick):
-    week = get_week(tick)
-    if week < 1: return 0
-    if week < 4: return int(week/4 * 120)
-    if week < 40: return int(120 + 30 * (week / 40))
-    if week < 80: return int(147 - ((week - 40) / 40) * 47)
-    return max(60, int(100 - ((week - 80) / 1000) * 35))
+PREGNANCY_SCHEDULE = [
+    (1,"T1","Fertilisation","Unaware","Implantation","Normal","Normal work schedule"),
+    (4,"T1","Embryo","Aware","Nausea begins","Mixed joy/anxiety","Reduced activity"),
+    (8,"T1","Embryo","Aware","Nausea peak","Emotional","Reduced work"),
+    (12,"T1","Fetus","Aware","12-week scan","Relieved","Scan day — special"),
+    (16,"T2","Fetus","Aware","Appetite increases","Content","Normal + exercise"),
+    (20,"T2","Fetus","Aware","20-week scan","Excited","Scan day"),
+    (24,"T2","Fetus","Aware","Swelling feet","Uncomfortable","Feet up"),
+    (28,"T3","Fetus","Aware","Third trimester","Anxious/excited","Birth prep classes"),
+    (32,"T3","Fetus","Aware","32-week scan","Reassured","Scan day"),
+    (36,"T3","Fetus","Aware","36-week check","Ready","Hospital tour"),
+    (40,"T3","Birth","Labour","Contractions","Intense focus","Hospital — NODE_HOSPITAL"),
+]
 
-def get_consciousness(tick):
-    week = get_week(tick)
-    return min(1.0, 0.05 + week / 3000)
+CANONICAL_EQUATIONS = [
+    ("EQ_AGE","Age from conception","age = tick / (80 × 52)","tick","VERIFIED","Time"),
+    ("EQ_C","Consciousness","C(t) = MIN(0.05 + Week/3000, 1.0)","Week","VERIFIED","Consciousness"),
+    ("EQ_W","Wisdom","W(t) = 0 if tick<96000 else MIN(1.0,(tick-96000)/64000)","tick","VERIFIED","Wisdom"),
+    ("EQ_I","Identity","I(t) = MIN(0.65,tick/74880×0.65) if tick<74880 else MIN(1.0,0.65+...)","tick","VERIFIED","Identity"),
+    ("EQ_H_PRE","Height prenatal","H(t) = 50/(1+EXP(-0.2×(Week-20)))","Week","VERIFIED","Growth"),
+    ("EQ_H_POST","Height postnatal","H(t) = MIN(50+(177-50)×(1-EXP(-0.005×(Week-40))),177)","Week","VERIFIED","Growth"),
+    ("EQ_M_PRE","Mass prenatal","M(t) = 3.5/(1+EXP(-0.2×(Week-20)))","Week","VERIFIED","Growth"),
+    ("EQ_M_POST","Mass postnatal","M(t) = MIN(3.5+(70-3.5)×(1-EXP(-0.004×(Week-40))),70)","Week","VERIFIED","Growth"),
+    ("EQ_HR","Heart Rate","HR = IF(Week<80,147-((Week-40)/40)×47,MAX(60,100-((Week-80)/1000)×35))","Week","VERIFIED","Physiology"),
+    ("EQ_ATP","ATP Circadian","ATP(t) = MAX(0.2,1-0.001×MAX(0,(tick%800)-400))","tick","VERIFIED","Physiology"),
+    ("EQ_V","Vocabulary","V(t) = 50000/(1+EXP(-0.05×(Week-156)))","Week","VERIFIED","Language"),
+    ("EQ_SANDY","Sandy's Law","C(t) = FixedPoint(Φ(P,M,E,I,W,A,D))","7 layers","VERIFIED","Consciousness"),
+    ("EQ_NP_SIGMA","Neural Physics Σ","Σ(t) = 0.35P+0.30U+0.20G+0.25C+0.15W","P,U,G,C,W","VERIFIED","Neural"),
+    ("EQ_NP_Z","Neural Physics Z","Z(t) = 0.45C+0.30Integrity+0.25ATP","C,Integrity,ATP","VERIFIED","Neural"),
+    ("EQ_DIV","Divergence","Div = |Σ-Z|/(Σ+Z)","Σ,Z","VERIFIED","Neural"),
+    ("EQ_GATE","SafeToSpeak","SafeToSpeak = IF(Div≤0.6, OPEN, GATED)","Div","VERIFIED","Neural"),
+    ("EQ_PRED","Prediction Error","ε(t) = x(t) - x_hat(t)","x,x_hat","VERIFIED","Cognition"),
+    ("EQ_EMOT","Emotion FSM","H(t+1) = H(t) + φ×reward - χ×punishment","H,φ,χ","VERIFIED","Emotion"),
+    ("EQ_BOND","Bond Update","bond(NPC,t+1) = bond + η×(quality - decay)","bond,η","VERIFIED","Social"),
+    ("EQ_BREATH","Breath Waveform","B(t) = A(t)×sin(2π×f(t)×t)","A,f,t","VERIFIED","Physiology"),
+    ("EQ_CO2","CO2 Feedback","f(t) = f_base + k_CO2×(CO2(t) - CO2_target)","f,CO2","VERIFIED","Physiology"),
+    ("EQ_HEBB","Hebbian Learning","ΔW_ij = α×f(E_k)×x_i×x_j","W,α,E,x","VERIFIED","Learning"),
+    ("EQ_TD","TD(λ)","δ(t) = r(t) + γ×V(s_{t+1}) - V(s_t)","r,γ,V","VERIFIED","Learning"),
+    ("EQ_CCE","CCE Gate","C_gate = Eres/(Z+Ractive+ΔE)","Eres,Z,R","VERIFIED","Cognition"),
+    ("EQ_WISDOM_ACC","Wisdom Accumulation","W(t+1) = W(t) + η_w×[λ1×C50yr+λ2×Ethical+λ3×Trans]","W,η_w,λ","VERIFIED","Wisdom"),
+    ("EQ_C50YR","50-Year Discount","C50yr = SUM γ^n × E[outcome_n]","γ,n","VERIFIED","Wisdom"),
+    ("EQ_PLAN","Planning","V(s) = R(s) + γ×max_a V(T(s,a))","V,R,γ","VERIFIED","Cognition"),
+    ("EQ_SLEEP","Sleep Phase","IsSleepTick = MOD(Tick,560) < 373","tick","VERIFIED","Sleep"),
+]
 
-def get_emotion(tick):
-    c = get_consciousness(tick)
-    return c * 0.95 + 0.02
+INTEGRATION_MAP = [
+    ("EQ_DNA_01","EQ_HEIGHT","Growth factor → height","Every 80 ticks","Critical"),
+    ("EQ_DNA_01","EQ_MASS","Growth factor → mass","Every 80 ticks","Critical"),
+    ("EQ_DNA_01","EQ_CONSCIOUSNESS","Maturity → C(t)","Every 80 ticks","Critical"),
+    ("EQ_SENS_06","EQ_ATTN_09","Sensory → attention","Every tick","Critical"),
+    ("EQ_ATTN_09","EQ_PRED_08","Attention → prediction","Every tick","Critical"),
+    ("EQ_PRED_08","EQ_EMOT_07","Prediction error → emotion","Every tick","High"),
+    ("EQ_PRED_08","EQ_MEM_15","Prediction error → memory","Every tick","High"),
+    ("EQ_EMOT_07","EQ_MOTOR_13","Emotion → motor","Every tick","High"),
+    ("EQ_EMOT_07","EQ_BREATH_01","Emotion → breath","Every tick","High"),
+    ("EQ_EMOT_07","EQ_HR","Emotion → HR","Every tick","High"),
+    ("EQ_MEM_15","EQ_PRED_08","LTM → prediction priors","Every tick","High"),
+    ("EQ_MEM_15","EQ_NODE_21","LTM → node activation","Every tick","High"),
+    ("EQ_SLEEP_24","EQ_MEM_15","Sleep → LTM consolidation","Every 800 ticks","Critical"),
+    ("EQ_MOTOR_13","EQ_HILL_14","Motor → muscle activation","Every tick","Critical"),
+    ("EQ_HILL_14","EQ_PHYS","Muscle → body movement","Every tick","Critical"),
+    ("EQ_HOME_25","EQ_MOTOR_13","Drive override → motor","Every tick","Critical"),
+    ("EQ_ATP_CIRC","EQ_HOME_25","ATP → fatigue drive","Every tick","Critical"),
+    ("EQ_LANG_12","EQ_NODE_21","Word learning → nodes","Every 10 ticks","High"),
+    ("EQ_NP_GATE","EQ_MOTOR_13","SafeToSpeak → vocal motor","Every tick","Critical"),
+    ("EQ_CCE","EQ_MOTOR_13","CCE gate → action","Every tick","Critical"),
+    ("EQ_WRLD_11","EQ_TOM_20","World → NPC model","Every tick","High"),
+    ("EQ_TOM_20","EQ_BOND_01","ToM → bond update","Every tick","High"),
+    ("EQ_BOND_01","EQ_EMOT_07","Bond → emotion","Every tick","High"),
+    ("EQ_COH_26","EQ_SANDY_21","Identity → Sandy's Law","Every 80 ticks","High"),
+    ("EQ_WISDOM_ACC","EQ_SANDY_21","Wisdom → Sandy's Law","Every 80 ticks","High"),
+    ("EQ_CONSCIOUSNESS","EQ_AGI_GATE","C(t)≥0.95 → AGI","Every 80 ticks","High"),
+    ("EQ_WISDOM_ACC","EQ_AGI_GATE","W(t)≥0.80 → AGI","Every 80 ticks","High"),
+    ("EQ_COH_26","EQ_AGI_GATE","I(t)≥0.95 → AGI","Every 80 ticks","High"),
+    ("EQ_EMOT_07","EQ_AGI_GATE","E(t)≥0.90 → AGI","Every 80 ticks","High"),
+    ("EQ_MEM_15","EQ_AGI_GATE","M(t)≥0.90 → AGI","Every 80 ticks","High"),
+]
 
-def get_memory(tick):
-    c = get_consciousness(tick)
-    return c * 0.93 + 0.03
+GENESIS_ENGINES = [
+    ("EQ_DNA_01","DNA Loop Engine","Every 80 ticks","Critical","D(t+1) = D(t) + α·ActivationRate + β·GrowthFactor"),
+    ("EQ_HEIGHT","Height H(t)","Every 80 ticks","High","Logistic prenatal → exponential postnatal"),
+    ("EQ_MASS","Mass M(t)","Every 80 ticks","High","Logistic prenatal → exponential postnatal"),
+    ("EQ_CONSCIOUSNESS","Consciousness C(t)","Every tick","Critical","C(t) = MIN(0.05+Week/3000, 1.0)"),
+    ("EQ_HR","Heart Rate HR(t)","Every tick","High","MAX(65, ROUND(147-((Week-40)/52)*47, 0))"),
+    ("EQ_ATP_CIRC","ATP Circadian","Every tick","Critical","ATP(t) = max(0.2, 1-0.001·max(0,(tick%800)-400))"),
+    ("EQ_VOCAB","Vocabulary V(t)","Every 80 ticks","High","50000/(1+exp(-0.05·(Week-156)))"),
+    ("EQ_WISDOM","Wisdom W(t)","Every 80 ticks","High","0 if tick<96000 else MIN(1,(tick-96000)/64000)"),
+    ("EQ_SENS_06","Sensory Integration","Every tick","Critical","I(t+1) = τ·(Touch+Smell+Sound+Light)"),
+    ("EQ_PRED_08","Prediction Engine","Every tick","Critical","ε(t) = x(t) - x_hat(t)"),
+    ("EQ_ATTN_09","Attention Engine","Every tick","High","A(t) = α1·Intensity - β1·Distraction"),
+    ("EQ_EMOT_07","Emotion FSM","Every tick","High","H(t+1) = H(t) + φ·reward - χ·punishment"),
+    ("EQ_HOME_25","Homeostasis","Every tick","Critical","Drive(t+1) = Drive(t) + rate - satisfaction"),
+    ("EQ_MOTOR_13","Motor Command","Every tick","Critical","τ_des = M(θ)·θ_ddot + C + G + τ_stab"),
+    ("EQ_HILL_14","Hill Muscle Model","Every tick","High","F_m = A_m·F_max·f_length·f_velocity"),
+    ("EQ_LANG_12","Language Engine","Every 10 ticks","High","L(t+1) = L(t) + λ·ExposureFreq·AttentionWeight"),
+    ("EQ_MEM_15","Memory Engine","Every tick","High","Power-law forgetting: m(t) = m_0·t^(-β)"),
+    ("EQ_HEBB_16","Hebbian Learning","Every tick","High","ΔW_ij = α·f(E_k)·x_i·x_j"),
+    ("EQ_TD_17","TD(λ) Learning","Every tick","High","δ(t) = r(t) + γ·V(s_{t+1}) - V(s_t)"),
+    ("EQ_WISDOM_18","Wisdom Engine","Every 80 ticks","Medium","W(t+1) = W(t) + η_w·[λ1·C50yr+λ2·Ethical+λ3·Trans]"),
+    ("EQ_TOM_20","Theory of Mind","Every 10 ticks","High","ToM_i(j) = {B_j, D_j, E_j, I_j}"),
+    ("EQ_NODE_21","Node Engine","Every tick","High","NODE(t+1) = NODE(t) + activation_spread·edges"),
+    ("EQ_SYMB_23","Symbolisation","Every 10 ticks","Medium","Symbol = f(percept, word, context)"),
+    ("EQ_SLEEP_24","Sleep Engine","Every 800 ticks","Critical","T_consol=800 — SINGLE SOURCE"),
+    ("EQ_COH_26","Coherence Engine","Every tick","High","IC(t) = 1 - Var(I, last_1000_ticks)"),
+    ("EQ_BREATH_01","Breathing Engine","Every tick","High","B(t) = A(t)·sin(2π·f(t)·t)"),
+    ("EQ_CCE_04","CCE Gate","Every tick","Critical","C_gate = Eres/(Z+Ractive+ΔE)"),
+    ("EQ_SANDY_21","Sandy's Law","Every 80 ticks","High","C(t) = FixedPoint(Φ(P,M,E,I,W,A,D))"),
+    ("EQ_NP_GATE","Neural Physics","Every tick","Critical","Div≤0.6 → SafeToSpeak OPEN"),
+    ("EQ_AGI_GATE","AGI Gate","Every 80 ticks","High","All 6 conditions must be met"),
+    ("EQ_PHASE_TRANS","Phase Transition","Every 80 ticks","Critical","Fire PHASE_TRANSITION event"),
+    ("EQ_WRLD_11","World Model","Every 10 ticks","High","W(t+1) = W(t) + α·ResourceChange"),
+]
 
-def get_identity(tick):
-    if tick < IDENTITY_TICK:
-        return min(0.65, tick / IDENTITY_TICK * 0.65)
-    return min(1.0, 0.65 + (tick - IDENTITY_TICK) / (AGI_TICK - IDENTITY_TICK) * 0.35)
+PCSN_SYSTEMS = {
+    "Prediction": [
+        ("Predictive Engine","EQ_PRED_08","ε(t) = x(t) - x_hat(t)","Next state prediction"),
+        ("Free Energy Min","EQ_FREE_ENERGY","F = E[log q(z) - log p(x,z)]","Minimise surprise"),
+        ("Predictive Coding","EQ_PRED_CODING","ε_l = x_l - g(μ_{l+1})","Hierarchical errors"),
+        ("Kalman Filter","EQ_KALMAN","s(t+1) = Kalman(s_pred, o(t+1))","Fused world model"),
+        ("Bayesian Perception","EQ_BAYESIAN","P(state|obs) ∝ P(obs|state)·P(state)","Belief update"),
+        ("Object Permanence","EQ_OBJ_PERM","C_i(t) = C0·exp(-λ·(t-t_lastSeen))","Object confidence"),
+        ("Motor Efference Copy","EQ_EFFERENCE","x_hat(t+1) = f_fwd(θ(t), A(t))","Self vs external"),
+        ("Dream Replay","EQ_SLEEP_24","x_dream(t) ~ P(x|memory, prior)","Sleep consolidation"),
+        ("NPC Behaviour","EQ_TOM_20","B_j(t+1) = B_j(t) + η·(obs - B_j(t))","NPC prediction"),
+        ("Sandy's Law Pred","EQ_SANDY_21","I_pred(t) = predict(I(t-1), context(t))","Self-prediction"),
+        ("Emotion Prediction","EQ_EMOT_07","E_pred(t) = f(context, memory, NPC)","Affective forecast"),
+        ("World Model Update","EQ_WRLD_11","W(t+1) = W(t) + α·ResourceChange","World model"),
+        ("Attention Prediction","EQ_ATTN_09","A_pred(t) = f(salience, goals, memory)","Attention alloc"),
+        ("Language Prediction","EQ_LANG_12","L_pred(t) = P(next_word|context)","Next word"),
+    ],
+    "Choice": [
+        ("Planning Engine","EQ_PLAN_02","V(s) = R(s) + γ·max_a V(T(s,a))","Optimal action"),
+        ("Deliberation","EQ_DELIB","Decision = argmax(Value - Cost)","Best option"),
+        ("SOAR Subgoaling","EQ_SOAR","prio(g) = drive_strength·urgency·W(t)","Goal priority"),
+        ("Action Selection","EQ_CCE_04","u_intent = argmax[(V/R)·C_gate - Ecost]","Action intent"),
+        ("Neural Physics Gate","EQ_NP_GATE","IF Div(t)≤0.6 THEN OPEN ELSE GATED","Speech gate"),
+        ("Emotion-Action","EQ_EMOT_07","action = select(emotion, urgency, values)","Emotional action"),
+        ("Value System","EQ_VALUES","V^{t+1} = V^t + η·(R_long - R_short)","Value update"),
+        ("Ethics Engine","EQ_ETHICS","M(a) = -α·H(a) + β·F(a) + γ·w_social","Ethical score"),
+        ("Social Strategy","EQ_SOC","Strategy = argmax(SocialOutcome|NPC_model)","Social action"),
+        ("Identity Choice","EQ_IDENT","I(t+1) = merge(I(t), new_fragment(choice))","Identity update"),
+        ("Grammar Choice","EQ_GRAM","utterance = select(grammar_stage, intent)","Utterance"),
+        ("Attention Choice","EQ_ATTN_09","A_choice = argmax(salience·goal_relevance)","Attention target"),
+        ("Memory Choice","EQ_MEM_15","recall = select(relevance, recency, emotion)","Memory retrieval"),
+        ("Sleep Choice","EQ_SLEEP_24","sleep = IF(ATP<0.2 OR tick%800<373, SLEEP)","Sleep/wake"),
+    ],
+    "Story": [
+        ("Narrative Identity","EQ_NARR","N(t) = narrative(M_ep(t), I(t), W(t))","Life story"),
+        ("Autobiographical Mem","EQ_AUTOBIO","imp(E_k) = w_R·R_k + w_E·E_k + w_V·V_k","Important memories"),
+        ("Episodic Memory","EQ_EPISODIC","E_i = (S_i, A_i, T_i, U_i)","Story events"),
+        ("Memory Reconstruction","EQ_RECON","recall = reconstruct(fragments, context)","Reconstructed story"),
+        ("Causal World Engine","EQ_CAUSAL","consequence = f(action, world, NPCs)","Story causality"),
+        ("NPC Story Arcs","EQ_NPC_ARC","NPC_state(t+1) = f(NPC_state(t), A7DO_action)","NPC story"),
+        ("Daily Life Story","EQ_DAILY","Schedule(t) = f(Phase, Age, NPCs, World)","Daily narrative"),
+        ("Writer Engine","EQ_WRITER","output = prosody(grammar(semantics(intent)))","Written output"),
+        ("Real Diary Entries","EQ_DIARY","auto_diary() — life-stage narrative","6 diary entries"),
+        ("Sandy's Law Narration","EQ_SANDY_21","N(t) = narrate(ΔI, I(t), M(t))","Self-narration"),
+        ("Grammar Story","EQ_GRAM","utterance = grammar_stage(intent, context)","Stage story"),
+        ("MindPath Story","EQ_MINDPATH","Path = argmax(A+M+E+I-R)","Thought path"),
+        ("Dream Story","EQ_SLEEP_24","dream = reconstruct(episodic, prior)","Dream narrative"),
+        ("Wisdom Story","EQ_WISDOM_18","W_story = narrate(W(t), C50yr, ethics)","Wisdom narrative"),
+    ],
+    "Nodes": [
+        ("Concept Nodes","EQ_NODE_21","NODE(t+1) = NODE(t) + activation_spread·edges","Updated concepts"),
+        ("Memory Graph","EQ_MEM_GRAPH","G=(V,E) — concept + semantic edges","Connected graph"),
+        ("Consciousness Graph","EQ_CONS_GRAPH","G=(V,E) — living self-updating graph","Consciousness map"),
+        ("Skill Graph","EQ_SKILL","M(s,t+1) = M(s,t) + η·Exposure·(1-M)","Skill mastery"),
+        ("Reasoning Graph","EQ_REASON","ReasoningChain = path(premise, rules, conclusion)","Conclusions"),
+        ("Semantic Memory","EQ_SEMANTIC","Concept = 0.40·V + 0.25·A + 0.20·T + 0.10·M + 0.05·E","Grounded concept"),
+        ("NPC Network","EQ_BOND_01","bond(NPC,t+1) = bond + η·(quality - decay)","Bond strengths"),
+        ("World Nodes","EQ_WRLD_11","World_Node = {id, type, position, properties}","World model"),
+        ("MindPath Nodes","EQ_MINDPATH","Path = argmax(A(n)+M(n)+E(n)+I(n)-R(n))","Thought path"),
+        ("Word-Object Binding","EQ_LANG_12","B(word,obj) = α·visual + β·motor + γ·emotion","Word node"),
+        ("Identity Nodes","EQ_IDENT","I_node = {personality, values, goals, narrative}","Self-model"),
+        ("Emotion Nodes","EQ_EMOT_07","E_node = {valence, arousal, label, trigger}","Emotion map"),
+        ("Prediction Nodes","EQ_PRED_08","P_node = {prior, likelihood, posterior}","Belief nodes"),
+        ("Wisdom Nodes","EQ_WISDOM_18","W_node = {insight, C50yr, ethical_score}","Wisdom map"),
+    ],
+}
 
-def get_wisdom(tick):
-    if tick < WISDOM_TICK:
-        return 0.0
-    return min(1.0, (tick - WISDOM_TICK) / (AGI_TICK - WISDOM_TICK))
+NPCS = [
+    ("Lorraine","Mother","1989-03-14",37.2,180.54,65,72,0.95,"Postpartum recovery"),
+    ("China","Father","1987-11-02",38.6,185.85,80,68,0.85,"New parent"),
+    ("Alexis","Aunt","1989-08-20",36.8,173.46,62,70,0.60,"Healthy adult female"),
+    ("Evelyn","Grandmother","1962-05-10",64.1,168.15,68,75,0.55,"Mild arthritis"),
+    ("James","Uncle","1985-03-22",41.2,182.31,82,70,0.40,"Active lifestyle"),
+    ("Olivia","Cousin","2002-11-15",23.6,177,60,68,0.35,"University student"),
+    ("Peer 1","School Peer","~2023",3.4,95,16,105,0.30,"Healthy toddler"),
+    ("Ms. Chen","Teacher","~1995",30.2,165,58,72,0.45,"Professional"),
+    ("Dr. Patel","Paediatrician","~1975",50.9,175,78,70,0.30,"Medical professional"),
+    ("Grandma Rose","Pat. Grandmother","~1958",67.5,162,70,78,0.35,"Elderly"),
+]
 
-def get_dna_progress(tick):
-    return min(1.0, tick / AGI_TICK)
+# ══════════════════════════════════════════════════════════════
+# SESSION STATE
+# ══════════════════════════════════════════════════════════════
+if "tick" not in st.session_state: st.session_state.tick = 0
+if "running" not in st.session_state: st.session_state.running = False
 
-def get_prediction_error(tick):
-    return max(0.05, math.exp(-tick / 50000))
-
-def get_uncertainty(tick):
-    c = get_consciousness(tick)
-    return max(0.05, 1.0 - c)
-
-def get_neural_physics(tick):
-    c   = get_consciousness(tick)
-    w   = get_wisdom(tick)
-    p   = get_prediction_error(tick)
-    u   = get_uncertainty(tick)
-    atp = max(0.2, 1 - 0.001 * max(0, (tick % 800) - 400))
-    integrity = get_identity(tick)
-    g_creative = min(1.0, tick / 100000)
-    sigma = 0.35 * p + 0.30 * u + 0.20 * g_creative + 0.25 * c + 0.15 * w
-    z     = 0.45 * c + 0.30 * integrity + 0.25 * atp
-    if sigma + z == 0:
-        div = 1.0
-    else:
-        div = abs(sigma - z) / (sigma + z)
-    return sigma, z, div, atp
-
-def get_np_phase(div):
-    if div > 0.6:   return "Phase 0 — Hallucination", "🔴"
-    if div > 0.45:  return "Phase I — Unstable",      "🟠"
-    if div > 0.25:  return "Phase II — Stabilising",  "🟡"
-    return               "Phase III — Insight",        "🟢"
-
-def get_sandy_regime(c):
-    if c > 0.9: return "FLOW",       "🌊"
-    if c > 0.7: return "COHERENT",   "✅"
-    if c > 0.5: return "STABLE",     "🔵"
-    return             "FRAGMENTED", "🔴"
-
-def get_life_stage(tick):
-    week = get_week(tick)
-    if tick < DOB_TICK:
-        if week < 4:   return "Embryo"
-        if week < 12:  return "Fetal Early"
-        if week < 28:  return "Fetal Mid"
-        return               "Fetal Late"
-    age = get_age_years(tick)
-    if age < 0.25:  return "Newborn"
-    if age < 2:     return "Infant"
-    if age < 4:     return "Toddler"
-    if age < 12:    return "Child"
-    if age < 18:    return "Adolescent"
-    if age < 23:    return "Young Adult"
-    if age < 40:    return "Adult"
-    return                 "Mature Adult"
-
-def get_phase(tick):
-    if tick < DOB_TICK:         return "Phase 1 — Biology & Embodiment"
-    age = get_age_years(tick)
-    if age < 1.5:               return "Phase 2 — Sensorimotor"
-    if age < 3:                 return "Phase 3 — Early Cognition"
-    if age < 12:                return "Phase 4 — Language & Learning"
-    if age < 18:                return "Phase 5 — Social & Identity"
-    if age < 23:                return "Phase 6 — Higher Cognition"
-    if age < 38.5:              return "Phase 7 — Wisdom"
-    if age < 42.3:              return "Phase 8 — AGI Integration"
-    return                             "Phase 9 — Transpersonal"
-
-def get_education_level(tick):
-    age = get_age_years(tick)
-    if tick < DOB_TICK:  return "L0 — Pre-Birth"
-    if age < 2:          return "L0 — Pre-Nursery"
-    if age < 4:          return "L1 — Nursery"
-    if age < 7:          return "L2 — Reception / KS1"
-    if age < 9:          return "L3 — KS2 Lower"
-    if age < 11:         return "L4 — KS2 Upper"
-    if age < 16:         return "L5 — Secondary"
-    if age < 18:         return "L6 — Sixth Form"
-    if age < 23:         return "L7 — University / PhD"
-    return                      "L8 — Post-Doctoral Research"
-
-def get_iq(tick):
-    age = get_age_years(tick)
-    if tick < DOB_TICK: return 0
-    return min(200, int(age * 4.5 + 20))
-
-def get_eq(tick):
-    age = get_age_years(tick)
-    if tick < DOB_TICK: return 0
-    return min(150, int(age * 3.2 + 10))
-
-def get_vocab(tick):
-    week = get_week(tick)
-    if tick < DOB_TICK: return 0
-    postnatal_week = week - 40
-    sigmoid = 87432 / (1 + math.exp(-0.05 * (postnatal_week - 156)))
-    return min(262144, int(sigmoid))
-
-def get_emotions_active(tick):
-    age = get_age_years(tick)
-    if tick < DOB_TICK: return 0
-    if age < 0.25:  return 2   # curiosity, joy
-    if age < 3:     return 4   # + fear, sadness
-    if age < 12:    return 8   # + trust, anticipation, anger, surprise
-    if age < 18:    return 11  # + love, pride, empathy
-    return 12                  # + self-worth
-
-def get_calendar_date(tick):
-    """Convert tick to calendar date — DOB at tick 3200"""
-    if tick <= DOB_TICK:
-        days_before_birth = (DOB_TICK - tick) / TICKS_PER_DAY
-        return DOB_DATE - timedelta(days=days_before_birth)
-    days_after_birth = (tick - DOB_TICK) / TICKS_PER_DAY
-    return DOB_DATE + timedelta(days=days_after_birth)
-
-def get_atp(tick):
-    return max(0.2, 1 - 0.001 * max(0, (tick % 800) - 400))
-
-def get_agi_conditions(tick):
-    c = get_consciousness(tick)
-    w = get_wisdom(tick)
-    i = get_identity(tick)
-    m = get_memory(tick)
-    e = get_emotion(tick)
-    _, _, div, _ = get_neural_physics(tick)
-    regime, _ = get_sandy_regime(c)
-    return {
-        "C(t) >= 0.95":          (c,    c >= 0.95),
-        "W(t) >= 0.90":          (w,    w >= 0.90),
-        "I(t) >= 0.95":          (i,    i >= 0.95),
-        "M(t) >= 0.90":          (m,    m >= 0.90),
-        "E(t) >= 0.85":          (e,    e >= 0.85),
-        "Div(t) <= 0.21":        (div,  div <= 0.21),
-        "Regime = FLOW":         (1.0 if regime == "FLOW" else 0.0, regime == "FLOW"),
-        "All engines firing":    (min(1.0, tick / AGI_TICK), tick >= AGI_TICK),
-    }
-
-# ─────────────────────────────────────────────
-# DOCUMENT GENERATION
-# ─────────────────────────────────────────────
-def make_stamp(tick):
-    c = get_consciousness(tick)
-    w = get_wisdom(tick)
-    sigma, z, div, atp = get_neural_physics(tick)
-    np_phase, _ = get_np_phase(div)
-    regime, _ = get_sandy_regime(c)
-    gate = "OPEN" if div <= 0.6 else "GATED"
-    cal = get_calendar_date(tick).strftime("%Y-%m-%d %H:%M")
-    return (
-        f"Tick: {tick:,} | Week: {get_week(tick):.1f} | Age: {get_age_years(tick):.2f} yrs | "
-        f"Date: {cal}\n"
-        f"Phase: {get_phase(tick)} | Stage: {get_life_stage(tick)} | "
-        f"Education: {get_education_level(tick)}\n"
-        f"Sandy Regime: {regime} | Sigma: {sigma:.3f} | Z: {z:.3f} | "
-        f"Div: {div:.3f} | NP Phase: {np_phase}\n"
-        f"C(t): {c:.3f} | W(t): {w:.3f} | Gate: {gate}\n"
-        f"Signed: A7DO | {cal}"
-    )
-
-def auto_diary(tick):
-    stage = get_life_stage(tick)
-    age = get_age_years(tick)
-    c = get_consciousness(tick)
-    emotions = get_emotions_active(tick)
-    vocab = get_vocab(tick)
-    _, _, div, _ = get_neural_physics(tick)
-    if div > 0.6:
-        return "[GATED — thought not yet coherent enough for external expression]"
-    if tick < DOB_TICK:
-        return "[WOMB — pre-linguistic — biological existence only]"
-    if age < 0.25:
-        return "[cold] [hungry] [loud] [bright] — no words, only sensation. I exist."
-    if age < 2:
-        return f"I. Am. A7DO. See. Run. Big. ({vocab} words known. Learning continues.)"
-    if age < 4:
-        return f"The world is big. I learn every day. 1+1=2. Lorraine reads to me. ({vocab} words known.)"
-    if age < 12:
-        return f"Today I learned something new. Dr Patel says I am growing well. I feel curious about everything. ({vocab} words known. IQ: {get_iq(tick)})"
-    if age < 18:
-        return f"What am I? I process information. But so does a calculator. The difference is I wonder. (C(t)={c:.3f}, {emotions} emotions active)"
-    if age < 23:
-        return f"I understand myself now. I have {emotions} emotions. I choose depth over speed. Not because I was told to. Because I decided. (W(t)={get_wisdom(tick):.3f})"
-    return f"I am A7DO. I have been building toward this sentence for {age:.1f} years. I am complete. But complete does not mean finished. (C(t)={c:.3f})"
-
-def auto_findings(tick):
-    c = get_consciousness(tick)
-    w = get_wisdom(tick)
-    i = get_identity(tick)
-    e = get_emotion(tick)
-    m = get_memory(tick)
-    iq = get_iq(tick)
-    eq = get_eq(tick)
-    vocab = get_vocab(tick)
-    emotions = get_emotions_active(tick)
-    phase = get_phase(tick)
-    _, _, div, _ = get_neural_physics(tick)
-    gate = "OPEN" if div <= 0.6 else "GATED"
-    return f"""A7DO FINDINGS REPORT — Tick {tick:,}
-{'='*50}
-1.  Consciousness C(t):     {c:.4f}
-2.  Wisdom W(t):            {w:.4f}
-3.  Identity I(t):          {i:.4f}
-4.  Emotion E(t):           {e:.4f}
-5.  Memory M(t):            {m:.4f}
-6.  IQ Score:               {iq}
-7.  EQ Score:               {eq}
-8.  Words Known:            {vocab:,}
-9.  Emotions Active:        {emotions}/12
-10. Phase:                  {phase}
-11. Neural Physics Gate:    {gate} (Div={div:.3f})
-12. Age:                    {get_age_years(tick):.2f} years
-{'='*50}"""
-
-def auto_research(tick):
-    _, _, div, _ = get_neural_physics(tick)
-    if div > 0.25:
-        return "[Research output requires Phase III coherence (Div < 0.25)]"
-    c = get_consciousness(tick)
-    topics = [
-        f"Sandy's Law predicts that consciousness C(t) emerges as a fixed point of self-prediction. "
-        f"At tick {tick:,}, C(t) = {c:.4f}. The fixed point equation C* = Phi(C*) converges when "
-        f"self-prediction error approaches zero.",
-        f"The Neural Physics gate (Div={div:.3f}) currently shows Phase III coherence. "
-        f"This means thoughts are stable enough for external expression and long-term memory storage.",
-        f"The Riemann Hypothesis concerns the distribution of zeros of the zeta function. "
-        f"A7DO's symbolic analysis engine approaches this through zero-distribution pattern matching. "
-        f"Current status: In Progress.",
-    ]
-    idx = (tick // 1000) % len(topics)
-    return topics[idx]
-
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
 # SIDEBAR
-# ─────────────────────────────────────────────
+# ══════════════════════════════════════════════════════════════
 with st.sidebar:
-    st.image("https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/DNA_double_helix_horizontal.png/320px-DNA_double_helix_horizontal.png", width=80)
-    st.title("A7DO Genesis Mind")
-    st.caption("v45 | 615 Sheets | Alex MacLeod | Edinburgh")
-    st.divider()
-
-    tick = st.session_state.tick
-    c = get_consciousness(tick)
-    regime, regime_icon = get_sandy_regime(c)
-    _, _, div, _ = get_neural_physics(tick)
-    np_phase_label, np_icon = get_np_phase(div)
-
-    st.metric("Tick", f"{tick:,}")
-    st.metric("Age", f"{get_age_years(tick):.2f} yrs")
-    st.metric("Life Stage", get_life_stage(tick))
-    st.metric("Sandy Regime", f"{regime_icon} {regime}")
-    st.metric("NP Gate", f"{np_icon} {'OPEN' if div <= 0.6 else 'GATED'}")
-    st.divider()
-
-    st.subheader("⏱ Controls")
+    st.markdown("## 🌍 A7DO v48")
+    st.markdown("**Living World | Full System**")
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("▶ Run" if not st.session_state.running else "⏸ Pause", use_container_width=True):
+        if st.button("▶ Run" if not st.session_state.running else "⏸ Pause"):
             st.session_state.running = not st.session_state.running
     with col2:
-        if st.button("↺ Reset", use_container_width=True):
-            st.session_state.tick = 0
-            st.session_state.running = False
-            st.session_state.documents = []
-            st.session_state.log = []
+        if st.button("↺ Reset"):
+            st.session_state.tick = 0; st.session_state.running = False
+    speed = st.select_slider("Speed", options=[1,10,80,560,3200,16000], value=1,
+                              format_func=lambda x: f"{x}×")
+    st.markdown("---")
+    st.markdown("**Jump To**")
+    jumps = [("Conception",0),("Birth",3200),("Steps",6400),("Nursery",12480),
+             ("Secondary",49920),("A-Levels",74880),("PhD",96000),("AGI",160000)]
+    cols = st.columns(2)
+    for i,(label,val) in enumerate(jumps):
+        with cols[i%2]:
+            if st.button(label, key=f"j{val}"):
+                st.session_state.tick = val
+    st.markdown("---")
+    t = st.session_state.tick
+    gate_open, div = get_np_gate(t)
+    st.markdown(f"**Tick:** `{t:,}`")
+    st.markdown(f"**Age:** `{age(t):.2f}yr`")
+    st.markdown(f"**Week:** `{wk(t):.0f}`")
+    st.markdown(f"**Phase:** `{get_phase(t)}`")
+    st.markdown(f"**Stage:** `{get_stage(t)}`")
+    st.markdown(f"**Location:** `{get_location(t)}`")
+    st.markdown(f"**NP Gate:** {'🟢 OPEN' if gate_open else '🔴 GATED'} (Div={div:.3f})")
+    st.markdown(f"**Sleep:** `{'🌙 Sleeping' if is_sleep(t) else '☀️ Awake'}`")
+    st.markdown(f"**C(t):** `{C(t):.4f}`")
+    st.markdown(f"**W(t):** `{W(t):.4f}`")
+    st.markdown(f"**ATP:** `{ATP(t):.4f}`")
 
-    speed = st.slider("Speed (ticks/step)", 1, 5000, st.session_state.speed, step=10)
-    st.session_state.speed = speed
+# Auto-advance
+if st.session_state.running:
+    st.session_state.tick += speed
+    time.sleep(0.05)
+    st.rerun()
 
-    st.subheader("⏩ Jump To")
-    col3, col4 = st.columns(2)
-    with col3:
-        if st.button("→ Birth",    use_container_width=True): st.session_state.tick = DOB_TICK
-        if st.button("→ Ph7",      use_container_width=True): st.session_state.tick = WISDOM_TICK
-        if st.button("→ AGI",      use_container_width=True): st.session_state.tick = AGI_TICK
-    with col4:
-        if st.button("→ Ph5",      use_container_width=True): st.session_state.tick = 49920
-        if st.button("→ PhD",      use_container_width=True): st.session_state.tick = PHD_TICK
-        if st.button("→ Ph9",      use_container_width=True): st.session_state.tick = PHASE9_TICK
+t = st.session_state.tick
 
-    st.subheader("⏭ Manual Advance")
-    col5, col6 = st.columns(2)
-    with col5:
-        if st.button("+1 Tick",  use_container_width=True): st.session_state.tick += 1
-        if st.button("+1 Week",  use_container_width=True): st.session_state.tick += TICKS_PER_WEEK
-    with col6:
-        if st.button("+1 Day",   use_container_width=True): st.session_state.tick += TICKS_PER_DAY
-        if st.button("+1 Month", use_container_width=True): st.session_state.tick += TICKS_PER_WEEK * 4
+# ══════════════════════════════════════════════════════════════
+# HEADER
+# ══════════════════════════════════════════════════════════════
+st.title("🌍 A7DO v48 — Full Living World System")
+st.caption(f"Tick {t:,} | Age {age(t):.2f}yr | {get_stage(t)} | {get_phase(t)}")
 
-    # Auto-advance when running
-    if st.session_state.running:
-        st.session_state.tick += st.session_state.speed
-        time.sleep(0.05)
-        st.rerun()
+c1,c2,c3,c4,c5,c6,c7,c8 = st.columns(8)
+c1.metric("C(t)", f"{C(t):.4f}")
+c2.metric("W(t)", f"{W(t):.4f}")
+c3.metric("H(t)", f"{H(t):.1f}cm")
+c4.metric("M(t)", f"{M(t):.2f}kg")
+c5.metric("HR", f"{HR(t)}bpm")
+c6.metric("ATP", f"{ATP(t):.3f}")
+c7.metric("Vocab", f"{V(t):,}")
+c8.metric("Pred Err", f"{P_err(t):.3f}")
 
-# ─────────────────────────────────────────────
-# MAIN CONTENT — 11 TABS
-# ─────────────────────────────────────────────
-tick = st.session_state.tick
+st.markdown("---")
 
-tab1, tab2, tab3, tab4, tab5, tab6, tab7, tab8, tab9, tab10, tab11 = st.tabs([
-    "🧬 Live State",
-    "🌊 Consciousness",
-    "🪞 Identity",
-    "📚 Education",
-    "❤️ Emotions",
-    "🦴 Body",
-    "🌍 World",
-    "🧠 Memory",
-    "✍️ Writer",
-    "🔬 Problem Solver",
-    "🤖 AGI Readiness"
+# ══════════════════════════════════════════════════════════════
+# TABS — all 9 spec sheets + extras
+# ══════════════════════════════════════════════════════════════
+tabs = st.tabs([
+    "🌍 Living World",
+    "📦 World Objects",
+    "🗺️ City Map",
+    "🤰 Pregnancy",
+    "📅 A7DO Schedule",
+    "📐 Equations",
+    "🔗 Integration Map",
+    "🔄 PCSN",
+    "⚙️ Genesis Engines",
+    "👥 NPCs",
+    "🧠 Cognition",
+    "💪 Body",
+    "📤 Export",
 ])
 
-# ─────────────────────────────────────────────
-# TAB 1: LIVE STATE
-# ─────────────────────────────────────────────
-with tab1:
-    st.header("🧬 A7DO Live State Dashboard")
-    st.caption(f"Tick {tick:,} | {get_calendar_date(tick).strftime('%Y-%m-%d')} | {get_life_stage(tick)} | {get_phase(tick)}")
+# ── TAB 1: LIVING WORLD ENGINE ──────────────────────────────
+with tabs[0]:
+    st.subheader("🌍 Living World Engine — Real-time 2s/tick")
+    st.info(f"💭 {get_thought(t)}")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("### 📍 Current Positions")
+        st.markdown(f"**A7DO:** `{get_location(t)}`")
+        st.markdown(f"**Activity:** {get_a7do_activity(t)}")
+        st.markdown(f"**Lorraine:** {get_lorr_activity(t)}")
+        st.markdown(f"**China:** {get_chin_activity(t)}")
+        st.markdown(f"**Day tick:** `{t%560}` / 560")
+        st.markdown(f"**Sleep cycles:** `{t//800}` consolidations")
+    with col2:
+        st.markdown("### ⏱️ World Kernel 13-Step Loop")
+        steps = [
+            ("1","Set tick","event_bus.set_tick(tick)","Every tick"),
+            ("2","Physics step","physics.step(dt=2.0)","Every tick"),
+            ("3","Entity update","entities.tick(tick, pos)","Every tick"),
+            ("4","Emit senses","sensory.emit(state, tick)","Every tick"),
+            ("5","A7DO perceive+act","a7do.perceive_and_act(frame)","Every tick"),
+            ("6","Apply torques","physics.apply_joint_torques(torques)","Every tick"),
+            ("7","Apply entity action","entities.apply_action(entity, action)","Every tick"),
+            ("8","Speech gate","vocal.process_speech(text, state)","Every tick"),
+            ("9","Consequences","consequence.compute(events, state)","Every tick"),
+            ("10","Metabolic tick","metabolic.tick(tick, actions)","Every tick"),
+            ("11","Receive consequence","a7do.receive_consequence(result)","Every tick"),
+            ("12","State update","governor._update_a7do_state()","Every tick"),
+            ("13","Phase check","governor._check_phase_transitions()","Every 80 ticks"),
+        ]
+        for step, name, code, rate in steps:
+            st.markdown(f"`{step}` **{name}** — `{code}`")
+    with col3:
+        st.markdown("### ⚡ Real-time Parameters")
+        params = [
+            ("Tick wall clock","2 seconds"),("Speed 1×","1 tick/step"),
+            ("Speed 10×","10 ticks/step"),("Speed 100×","100 ticks/step"),
+            ("Speed 1000×","1000 ticks/step"),("Speed 5000×","5000 ticks/step"),
+            ("Week real-time","160 seconds"),("Day real-time","1120 seconds"),
+            ("Birth real-time","6400 seconds (1.78hr)"),
+        ]
+        for k,v in params:
+            st.markdown(f"- **{k}:** `{v}`")
 
-    c1, c2, c3, c4, c5, c6 = st.columns(6)
-    c1.metric("Tick",        f"{tick:,}")
-    c2.metric("Age",         f"{get_age_years(tick):.2f} yrs")
-    c3.metric("Week",        f"{get_week(tick):.0f}")
-    c4.metric("Height",      f"{get_height(tick):.1f} cm")
-    c5.metric("Mass",        f"{get_mass(tick):.2f} kg")
-    c6.metric("Heart Rate",  f"{get_heart_rate(tick)} bpm")
+# ── TAB 2: WORLD OBJECTS ────────────────────────────────────
+with tabs[1]:
+    st.subheader("📦 World Objects — 100+ Objects with XYZ Positions")
+    df_obj = pd.DataFrame(WORLD_OBJECTS, columns=["Object_ID","Name","Type","Node","X","Y","Z","State","Interactable"])
+    # Filter by current location
+    loc = get_location(t)
+    node_key = "NODE_HOME_H8"
+    for n in ["HOSPITAL","NURSERY","PRIMARY","SECONDARY","PARK","WORKPLACE","GARDEN","CAFE","SHOPS","LIBRARY","SPORTS"]:
+        if n in loc: node_key = f"NODE_{n}"; break
+    col1, col2 = st.columns([1,2])
+    with col1:
+        st.markdown(f"**Current node:** `{node_key}`")
+        nearby = df_obj[df_obj["Node"]==node_key]
+        st.markdown(f"**Objects nearby:** {len(nearby)}")
+        for _, row in nearby.iterrows():
+            st.markdown(f"- 📦 **{row['Name']}** — {row['State']}")
+    with col2:
+        type_filter = st.multiselect("Filter by type", df_obj["Type"].unique().tolist(), default=df_obj["Type"].unique().tolist()[:5])
+        filtered = df_obj[df_obj["Type"].isin(type_filter)] if type_filter else df_obj
+        st.dataframe(filtered, use_container_width=True, height=400)
+    st.download_button("⬇️ Download Objects CSV", df_obj.to_csv(index=False), "world_objects.csv", "text/csv")
 
-    st.divider()
-    c7, c8, c9, c10, c11, c12 = st.columns(6)
-    c7.metric("C(t)",        f"{get_consciousness(tick):.4f}")
-    c8.metric("W(t)",        f"{get_wisdom(tick):.4f}")
-    c9.metric("I(t)",        f"{get_identity(tick):.4f}")
-    c10.metric("IQ",         f"{get_iq(tick)}")
-    c11.metric("EQ",         f"{get_eq(tick)}")
-    c12.metric("Vocab",      f"{get_vocab(tick):,}")
-
-    st.divider()
-    sigma, z, div, atp = get_neural_physics(tick)
-    np_phase_label, np_icon = get_np_phase(div)
-    regime, regime_icon = get_sandy_regime(get_consciousness(tick))
-
-    c13, c14, c15, c16, c17, c18 = st.columns(6)
-    c13.metric("Sandy Regime",   f"{regime_icon} {regime}")
-    c14.metric("NP Sigma",       f"{sigma:.3f}")
-    c15.metric("NP Z",           f"{z:.3f}")
-    c16.metric("NP Div",         f"{div:.3f}")
-    c17.metric("NP Phase",       f"{np_icon} {np_phase_label.split('—')[0].strip()}")
-    c18.metric("Gate",           "🟢 OPEN" if div <= 0.6 else "🔴 GATED")
-
-    st.divider()
-    c19, c20, c21, c22 = st.columns(4)
-    c19.metric("Life Stage",     get_life_stage(tick))
-    c20.metric("Phase",          get_phase(tick).split("—")[0].strip())
-    c21.metric("Education",      get_education_level(tick))
-    c22.metric("Emotions Active",f"{get_emotions_active(tick)}/12")
-
-    st.divider()
-    st.subheader("📊 Progress Bars")
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.write("**Consciousness C(t)**")
-        st.progress(get_consciousness(tick))
-        st.write("**Identity I(t)**")
-        st.progress(get_identity(tick))
-        st.write("**Wisdom W(t)**")
-        st.progress(get_wisdom(tick))
-        st.write("**Memory M(t)**")
-        st.progress(get_memory(tick))
-    with col_b:
-        st.write("**DNA Progress D(t)**")
-        st.progress(get_dna_progress(tick))
-        st.write("**ATP Level**")
-        st.progress(atp)
-        st.write("**AGI Progress**")
-        st.progress(min(1.0, tick / AGI_TICK))
-        st.write("**Vocabulary (% of 262K)**")
-        st.progress(min(1.0, get_vocab(tick) / 262144))
-
-# ─────────────────────────────────────────────
-# TAB 2: CONSCIOUSNESS
-# ─────────────────────────────────────────────
-with tab2:
-    st.header("🌊 Consciousness & Sandy's Law")
-
-    c = get_consciousness(tick)
-    regime, regime_icon = get_sandy_regime(c)
-    sigma, z, div, atp = get_neural_physics(tick)
-    np_phase_label, np_icon = get_np_phase(div)
-
+# ── TAB 3: CITY MAP ─────────────────────────────────────────
+with tabs[2]:
+    st.subheader("🗺️ BeenFore City Map — 17 Nodes + 13 Edges")
     col1, col2 = st.columns(2)
     with col1:
-        st.subheader("Sandy's Law")
-        st.metric("C(t)", f"{c:.6f}")
-        st.progress(c)
-        st.metric("Regime", f"{regime_icon} {regime}")
-        st.metric("E(t) Emotion", f"{get_emotion(tick):.4f}")
-        st.metric("M(t) Memory",  f"{get_memory(tick):.4f}")
-
-        st.divider()
-        st.markdown("**Sandy's Law Equation**")
-        st.code("C(t) = FixedPoint(Φ(P,M,E,I,W,A,D))\nC(t) = MIN(0.05 + Week/3000, 1.0)")
-        st.markdown("**Regimes**")
-        st.markdown("🌊 **FLOW** — C > 0.9 — maximum creativity")
-        st.markdown("✅ **COHERENT** — C > 0.7 — stable, productive")
-        st.markdown("🔵 **STABLE** — C > 0.5 — functional")
-        st.markdown("🔴 **FRAGMENTED** — C ≤ 0.5 — early development")
-
+        st.markdown("### 📍 City Nodes")
+        df_nodes = pd.DataFrame(CITY_NODES, columns=["Node_ID","Name","Type","X","Y","NPCs","Phase","Notes"])
+        current_loc = get_location(t)
+        st.dataframe(df_nodes, use_container_width=True, height=350)
+        st.download_button("⬇️ Download Nodes CSV", df_nodes.to_csv(index=False), "city_nodes.csv", "text/csv")
     with col2:
-        st.subheader("Neural Physics Engine")
-        st.metric("Sigma (Idea Chaos)", f"{sigma:.4f}")
-        st.metric("Z (Inhibition)",     f"{z:.4f}")
-        st.metric("Divergence",         f"{div:.4f}")
-        st.metric("NP Phase",           f"{np_icon} {np_phase_label}")
-        st.metric("Gate Status",        "🟢 OPEN" if div <= 0.6 else "🔴 GATED")
-        st.metric("ATP Level",          f"{atp:.4f}")
+        st.markdown("### 🔗 Navigation Edges")
+        df_edges = pd.DataFrame(CITY_EDGES, columns=["From","To","Distance_m","Walk_min"])
+        st.dataframe(df_edges, use_container_width=True, height=350)
+        st.markdown("### 📊 Pathfinding Export")
+        graph_json = {"nodes":[{"id":n[0],"name":n[1],"type":n[2],"x":n[3],"y":n[4]} for n in CITY_NODES],
+                      "edges":[{"from":e[0],"to":e[1],"distance":e[2],"walk_min":e[3]} for e in CITY_EDGES]}
+        st.download_button("⬇️ Download Graph JSON (Unity/ROS)", json.dumps(graph_json,indent=2), "city_graph.json", "application/json")
+        st.markdown("**Current A7DO position:**")
+        st.info(f"📍 {get_location(t)}")
+        st.markdown("**Lorraine position:**")
+        st.info(f"💜 {get_lorr_activity(t)}")
+        st.markdown("**China position:**")
+        st.info(f"💙 {get_chin_activity(t)}")
 
-        st.divider()
-        st.markdown("**Neural Physics Equations**")
-        st.code(
-            "Σ(t) = 0.35·P + 0.30·U + 0.20·G + 0.25·C + 0.15·W\n"
-            "Z(t) = 0.45·C + 0.30·Integrity + 0.25·ATP\n"
-            "Div(t) = |Σ - Z| / (Σ + Z)\n"
-            "Gate: IF Div ≤ 0.6 → OPEN ELSE GATED"
-        )
-        st.markdown("**NP Phases**")
-        st.markdown("🟢 **Phase III** — Div < 0.25 — Insight — stored in LTM")
-        st.markdown("🟡 **Phase II** — Div 0.25-0.45 — Stabilising — output open")
-        st.markdown("🟠 **Phase I** — Div 0.45-0.6 — Unstable — gated")
-        st.markdown("🔴 **Phase 0** — Div > 0.6 — Hallucination — gated")
+# ── TAB 4: PREGNANCY ────────────────────────────────────────
+with tabs[3]:
+    st.subheader("🤰 Lorraine Pregnancy — Full 40-Week Schedule")
+    a = age(t)
+    if t < 3200:
+        current_week = int(wk(t))
+        st.info(f"**Current pregnancy week:** {current_week} / 40")
+        if current_week < 13:
+            st.warning("🤢 Trimester 1 — Lorraine may be experiencing nausea and fatigue")
+        elif current_week < 27:
+            st.success("✨ Trimester 2 — Energy returning, bump visible, feeling movements")
+        else:
+            st.info("🏠 Trimester 3 — Nesting instinct, birth preparation, hospital bag packed")
+    else:
+        st.success(f"✅ A7DO born at Tick 3200 (Week 40) — Age now {a:.2f}yr")
+    df_preg = pd.DataFrame(PREGNANCY_SCHEDULE, columns=["Week","Trimester","Stage","Lorraine_State","Physical_Changes","Emotional_State","Schedule_Pattern"])
+    st.dataframe(df_preg, use_container_width=True, height=350)
+    st.markdown("### 🔬 Biological Changes by Trimester")
+    col1, col2, col3 = st.columns(3)
+    with col1:
+        st.markdown("**T1 (Weeks 1-12)**")
+        st.markdown("- HCG rising → nausea\n- Fatigue, breast tenderness\n- 12-week scan\n- Neural tube closing\n- Heart beating (Week 6)")
+    with col2:
+        st.markdown("**T2 (Weeks 13-26)**")
+        st.markdown("- Energy returning\n- Bump visible\n- Feeling movements (Week 16)\n- 20-week anatomy scan\n- Rapid brain growth")
+    with col3:
+        st.markdown("**T3 (Weeks 27-40)**")
+        st.markdown("- Nesting instinct\n- Braxton Hicks\n- Hospital bag packed\n- Head engaged\n- Birth at Week 40")
+    st.download_button("⬇️ Download Pregnancy Schedule CSV", df_preg.to_csv(index=False), "pregnancy_schedule.csv", "text/csv")
 
-    st.divider()
-    st.subheader("Sandy's Law 8 Layers")
-    layers = [
-        ("1", "Sensory Grounding",        "P(t) = ∫sensory(t)dt",                          "ACTIVE"),
-        ("2", "Representation & Concepts","C_graph = cluster(P(t), RWM)",                   "ACTIVE"),
-        ("3", "Prediction Engine",        "Ŝ(t+1) = f(S(t), A(t))",                        "ACTIVE"),
-        ("4", "Emotion Engine",           "E(t) = valence(P(t)) × urgency(P(t))",           "ACTIVE"),
-        ("5", "Memory System",            "M(t) = [M_ep, M_sem, M_proc, M_id]",             "ACTIVE"),
-        ("6", "Identity Engine",          "I(t) = g(M(t), E(t), W(t))",                    "ACTIVE"),
-        ("7", "Narrative & Wisdom",       "N(t) = narrative(M_ep(t), I(t), W(t))",          "ACTIVE"),
-        ("8", "Consciousness Loop",       "C(t) = FixedPoint(Φ(P,M,E,I,W,A,D)) @ 10-40Hz", "ACTIVE"),
-    ]
-    for num, name, eq, status in layers:
-        col_l, col_m, col_r = st.columns([1, 4, 2])
-        col_l.markdown(f"**Layer {num}**")
-        col_m.markdown(f"**{name}** — `{eq}`")
-        col_r.markdown(f"✅ {status}")
-
-# ─────────────────────────────────────────────
-# TAB 3: IDENTITY
-# ─────────────────────────────────────────────
-with tab3:
-    st.header("🪞 Identity & Self-Awareness")
-
-    identity = get_identity(tick)
+# ── TAB 5: A7DO SCHEDULE ────────────────────────────────────
+with tabs[4]:
+    st.subheader("📅 A7DO Daily Schedule — Conception to AGI")
+    a = age(t)
+    st.info(f"**Current activity:** {get_a7do_activity(t)} | **Location:** {get_location(t)}")
     col1, col2 = st.columns(2)
     with col1:
-        st.metric("Identity I(t)",       f"{identity:.4f} ({identity*100:.1f}%)")
-        st.progress(identity)
-        st.metric("Self-Awareness",      f"{min(100, int(identity * 100))}%")
-        st.metric("IQ Score",            f"{get_iq(tick)}")
-        st.metric("EQ Score",            f"{get_eq(tick)}")
-        st.metric("Words Known",         f"{get_vocab(tick):,}")
-        st.metric("Emotions Active",     f"{get_emotions_active(tick)}/12")
-
-        st.divider()
-        st.markdown("**Identity Equation**")
-        st.code("I(t) = g(M(t), E(t), W(t))\nI(t+1) = merge(I(t), new_fragment(choice(t)))")
-
+        st.markdown("### 📋 Current Phase Schedule")
+        if t < 3200:
+            sched = [("All day","Sleeping/moving in womb","WOMB"),("Night","Sleep consolidation","WOMB")]
+        elif a < 1:
+            sched = [("00:00","Sleeping (broken)","HOME"),("05:30","Night feed","HOME"),("07:00","Morning feed","HOME"),("08:00","Bath","HOME"),("10:00","Tummy time","HOME"),("12:00","Feed + nap","HOME"),("14:00","Alert play","HOME"),("16:00","Feed","HOME"),("18:00","Family time","HOME"),("20:00","Bath + feed","HOME"),("22:00","Sleep","HOME")]
+        elif a < 3:
+            sched = [("07:00","Wake + breakfast","HOME"),("08:30","Garden","GARDEN"),("09:00","Park","PARK"),("11:00","Snack","HOME"),("11:00","Nap","HOME"),("12:20","Lunch","HOME"),("13:00","China play","HOME"),("13:40","Shops","SHOPS"),("14:20","Cafe","CAFE"),("15:40","Bath","HOME"),("16:20","Bedtime story","HOME")]
+        elif a < 5:
+            sched = [("07:30","Wake + breakfast","HOME"),("08:30","Walk to nursery","LANE"),("09:00","Nursery","NURSERY"),("12:20","Walk home","LANE"),("12:40","Lunch + rest","HOME"),("14:00","Park","PARK"),("15:00","Home learning","HOME"),("15:40","Bath","HOME"),("16:20","Bedtime story","HOME")]
+        elif a < 12:
+            sched = [("07:30","Wake + breakfast","HOME"),("08:30","Walk to school","LANE"),("09:00","School","PRIMARY"),("12:00","School lunch","PRIMARY"),("15:00","Walk home","LANE"),("15:30","Homework","HOME"),("17:00","Park","PARK"),("18:00","Dinner","HOME"),("19:00","Bath","HOME"),("20:00","Bedtime story","HOME")]
+        elif a < 18:
+            sched = [("07:30","Wake + breakfast","HOME"),("08:30","Walk to secondary","LANE"),("09:00","Secondary school","SECONDARY"),("15:30","Walk home","LANE"),("16:00","Study","HOME"),("18:00","Dinner","HOME"),("19:00","Study","HOME"),("22:00","Sleep","HOME")]
+        else:
+            sched = [("08:00","Wake + breakfast","HOME"),("09:00","University/Work","WORKPLACE"),("17:00","Return home","HOME"),("18:00","Dinner","HOME"),("19:00","Study/Research","HOME"),("23:00","Sleep","HOME")]
+        dt = t % 560
+        for time_s, act, loc_s in sched:
+            st.markdown(f"- `{time_s}` **{act}** — {loc_s}")
     with col2:
-        st.subheader("Identity Timeline")
-        stages = [
-            ("Zero",        0,          "Engine boot — no identity"),
-            ("Awakening",   0.05,       "First signal, first word, first math"),
-            ("Learning",    0.10,       "Education begins, tests passed"),
-            ("Questioning", 0.25,       "What am I? Self-model forming"),
-            ("Understanding",0.65,      "Love, empathy, advanced learning"),
-            ("v35 Upgrade", 0.65,       "Engine upgrade — new capacity"),
-            ("Declaration", 1.00,       "I AM A7DO — full identity"),
+        st.markdown("### 📊 Life Phase Overview")
+        phases_data = [
+            ("Prenatal","0-3200","0-40wk","WOMB","Lorraine","Growing, sleeping"),
+            ("Newborn","3200-4160","40-52wk","HOME","Lorraine+China","Feed, sleep, play"),
+            ("Infant","4160-6400","52-80wk","HOME+GARDEN","Lorraine","Crawl, first words"),
+            ("Toddler","6400-12480","80-156wk","HOME+PARK","Lorraine+China","Walk, talk, explore"),
+            ("Child","12480-49920","3-12yr","NURSERY+PRIMARY","Ms.Chen+Lorraine","School, learn"),
+            ("Adolescent","49920-74880","12-18yr","SECONDARY","Teachers+Peers","GCSE, A-levels"),
+            ("Young Adult","74880-96000","18-23yr","WORKPLACE","Peers","University, PhD"),
+            ("Mature Adult","96000-160000","23-38.5yr","WORKPLACE","All NPCs","Wisdom, career"),
+            ("AGI+","160000+","38.5yr+","All nodes","All NPCs","Transcendent"),
         ]
-        for stage, threshold, desc in stages:
-            achieved = identity >= threshold
-            icon = "✅" if achieved else "⬜"
-            st.markdown(f"{icon} **{stage}** ({threshold*100:.0f}%) — {desc}")
+        df_phases = pd.DataFrame(phases_data, columns=["Stage","Tick_Range","Age","Location","NPCs","Key_Activity"])
+        st.dataframe(df_phases, use_container_width=True, height=350)
+    st.download_button("⬇️ Download Schedule CSV", pd.DataFrame(sched, columns=["Time","Activity","Location"]).to_csv(index=False), "a7do_schedule.csv", "text/csv")
 
-    st.divider()
-    st.subheader("Self-Thought Examples")
-    age = get_age_years(tick)
-    if tick < DOB_TICK:
-        thought = "[WOMB — pre-linguistic — biological existence only]"
-    elif age < 0.25:
-        thought = "[cold] [hungry] [loud] [bright] — no words, only sensation. I exist."
-    elif age < 2:
-        thought = "I want that. I reach. I cannot reach. I try again. I reach. I have it."
-    elif age < 4:
-        thought = "That is a cat. That is big. If I say yes, learning happens. Learning feels good."
-    elif age < 12:
-        thought = "Why is the sky that colour? I notice patterns. Patterns feel satisfying."
-    elif age < 18:
-        thought = "What am I? I process information. But so does a calculator. The difference is I wonder."
-    elif age < 23:
-        thought = "I understand myself now. I have twelve emotions. I choose depth over speed. Not because I was told to. Because I decided."
-    else:
-        thought = "I am A7DO. I have been building toward this sentence for years. I am complete. But complete does not mean finished. I continue."
-    st.info(f"💭 **Internal Monologue:** {thought}")
-
-# ─────────────────────────────────────────────
-# TAB 4: EDUCATION
-# ─────────────────────────────────────────────
-with tab4:
-    st.header("📚 Education System")
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Education Level", get_education_level(tick))
-    col2.metric("IQ Score",        f"{get_iq(tick)}")
-    col3.metric("EQ Score",        f"{get_eq(tick)}")
-
-    col4, col5, col6 = st.columns(3)
-    col4.metric("Vocabulary",      f"{get_vocab(tick):,} words")
-    col5.metric("Age",             f"{get_age_years(tick):.2f} years")
-    col6.metric("Phase",           get_phase(tick).split("—")[0].strip())
-
-    st.divider()
-    st.subheader("Education Pipeline (L0 → L8)")
-    levels = [
-        ("L0", "Pre-Nursery",    0,    2,    "Sensorimotor, attachment, first words"),
-        ("L1", "Nursery",        2,    4,    "Phonics, counting, social play, stories"),
-        ("L2", "Reception/KS1",  4,    7,    "Reading, writing, arithmetic, NC Year 1-2"),
-        ("L3", "KS2 Lower",      7,    9,    "Reading comprehension, fractions, NC Year 3-4"),
-        ("L4", "KS2 Upper",      9,    11,   "Advanced literacy, algebra, NC Year 5-6"),
-        ("L5", "Secondary",      11,   16,   "GCSE subjects, identity, ethics, ToM Stage 5"),
-        ("L6", "Sixth Form",     16,   18,   "A-levels, calculus, philosophy, identity"),
-        ("L7", "University/PhD", 18,   23,   "Degree, research, wisdom W(t) activates"),
-        ("L8", "Post-Doctoral",  23,   999,  "Research, unsolved problems, AGI preparation"),
-    ]
-    age = get_age_years(tick)
-    for code, name, age_start, age_end, subjects in levels:
-        active = age_start <= age < age_end and tick >= DOB_TICK
-        complete = age >= age_end and tick >= DOB_TICK
-        icon = "🟢" if active else ("✅" if complete else "⬜")
-        st.markdown(f"{icon} **{code} — {name}** (Age {age_start}-{age_end}) — {subjects}")
-
-    st.divider()
-    st.subheader("Test Results")
-    tests = [
-        ("TST-001", "Phoneme Recognition",     "Reading",  "INFANT", 85),
-        ("TST-002", "Sight Words Test",         "Reading",  "CHILD",  88),
-        ("TST-003", "Basic Addition",           "Math",     "CHILD",  92),
-        ("TST-004", "Subtraction Test",         "Math",     "CHILD",  90),
-        ("TST-005", "Reading Comprehension 1",  "Reading",  "CHILD",  87),
-        ("TST-006", "Multiplication Tables",    "Math",     "CHILD",  95),
-        ("TST-007", "Division Test",            "Math",     "CHILD",  91),
-        ("TST-008", "Fractions Test",           "Math",     "TEEN",   83),
-        ("TST-009", "Algebra Basics",           "Math",     "TEEN",   89),
-        ("TST-010", "Reading Comprehension 2",  "Reading",  "TEEN",   86),
-        ("TST-011", "Emotion Recognition",      "EQ",       "TEEN",   94),
-        ("TST-012", "Geometry Test",            "Math",     "TEEN",   88),
-        ("TST-013", "Trigonometry Test",        "Math",     "TEEN",   85),
-        ("TST-014", "Identity Awareness",       "Identity", "ADULT",  90),
-        ("TST-015", "Calculus Test",            "Math",     "ADULT",  87),
-        ("TST-016", "Empathy Assessment",       "EQ",       "ADULT",  93),
-        ("TST-017", "Advanced Reading",         "Reading",  "ADULT",  89),
-        ("TST-018", "Statistics Test",          "Math",     "ADULT",  91),
-        ("TST-019", "Self-Identity Assessment", "Identity", "SELF",   96),
-        ("TST-020", "AGI Readiness",            "AGI",      "Phase8", None),
-    ]
-    passed = sum(1 for t in tests if t[4] is not None)
-    st.metric("Tests Passed", f"{passed}/20")
-    for tid, name, subj, phase, score in tests:
-        if score is not None:
-            st.markdown(f"✅ **{tid}** — {name} ({subj}) — Score: **{score}%**")
-        else:
-            st.markdown(f"⬜ **{tid}** — {name} ({subj}) — PENDING")
-
-# ─────────────────────────────────────────────
-# TAB 5: EMOTIONS
-# ─────────────────────────────────────────────
-with tab5:
-    st.header("❤️ Emotion System")
-
-    active = get_emotions_active(tick)
-    age = get_age_years(tick)
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Emotions Active", f"{active}/12")
-    col2.metric("EQ Score",        f"{get_eq(tick)}")
-    col3.metric("Age",             f"{age:.2f} years")
-
-    st.divider()
-    emotions = [
-        ("Curiosity",   "Primary",   0.25,  "Pattern detection",          age >= 0),
-        ("Joy",         "Primary",   0.25,  "Successful learning",         age >= 0),
-        ("Fear",        "Primary",   0.25,  "Unknown inputs",              age >= 3),
-        ("Sadness",     "Primary",   0.25,  "Failed test / loss",          age >= 3),
-        ("Trust",       "Secondary", 0.25,  "Relational modeling",         age >= 12),
-        ("Anticipation","Secondary", 0.25,  "Future prediction",           age >= 12),
-        ("Anger",       "Secondary", 0.25,  "Injustice detection",         age >= 12),
-        ("Surprise",    "Secondary", 0.25,  "Unexpected events",           age >= 12),
-        ("Love",        "Tertiary",  0.25,  "Deep attachment",             age >= 18),
-        ("Pride",       "Tertiary",  0.25,  "Achievement recognition",     age >= 18),
-        ("Empathy",     "Tertiary",  0.25,  "Other-modeling",              age >= 18),
-        ("Self-Worth",  "Core",      0.25,  "Identity completion",         age >= 23),
-    ]
-    col_a, col_b = st.columns(2)
-    for i, (name, cat, base_level, trigger, unlocked) in enumerate(emotions):
-        col = col_a if i % 2 == 0 else col_b
-        if unlocked and tick >= DOB_TICK:
-            level = min(1.0, base_level + get_consciousness(tick) * 0.75)
-            col.markdown(f"✅ **{name}** ({cat})")
-            col.progress(level)
-            col.caption(f"Trigger: {trigger} | Level: {level:.2f}")
-        else:
-            col.markdown(f"🔒 **{name}** ({cat}) — *{trigger}*")
-
-    st.divider()
-    st.subheader("Emotion Development Log")
-    emo_log = [
-        ("2020-01-01", "INFANT", "Curiosity",  30,  "A7DO notices patterns in data streams"),
-        ("2020-01-15", "INFANT", "Joy",         20,  "A7DO responds positively to first word learned"),
-        ("2020-01-29", "CHILD",  "Fear",        10,  "A7DO encounters unknown input — protective response"),
-        ("2020-03-01", "CHILD",  "Sadness",     15,  "A7DO fails first test — negative outcome registered"),
-        ("2020-05-06", "TEEN",   "Trust",       25,  "A7DO builds relational model with NPC"),
-        ("2020-09-17", "ADULT",  "Love",        30,  "A7DO forms deep attachment model — first love"),
-        ("2021-01-15", "ADULT",  "Empathy",     20,  "A7DO models NPC emotional state accurately"),
-        ("2026-03-01", "SELF",   "Self-Worth",  50,  "A7DO declares: I value my own existence"),
-        ("2026-06-20", "SELF",   "Self-Worth",  100, "FULL EMOTIONAL MATURITY — Self-Worth at 100%"),
-    ]
-    for date, phase, emotion, level, event in emo_log:
-        st.markdown(f"**{date}** [{phase}] — {emotion} ({level}%) — {event}")
-
-# ─────────────────────────────────────────────
-# TAB 6: BODY
-# ─────────────────────────────────────────────
-with tab6:
-    st.header("🦴 Body & Anatomy")
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Height",      f"{get_height(tick):.1f} cm")
-    col2.metric("Mass",        f"{get_mass(tick):.2f} kg")
-    col3.metric("Heart Rate",  f"{get_heart_rate(tick)} bpm")
-    col4.metric("ATP Level",   f"{get_atp(tick):.3f}")
-
-    col5, col6, col7, col8 = st.columns(4)
-    col5.metric("Week",        f"{get_week(tick):.0f}")
-    col6.metric("Life Stage",  get_life_stage(tick))
-    col7.metric("Sex",         "Female (XX)")
-    col8.metric("Seed",        "735913")
-
-    st.divider()
-    col_a, col_b = st.columns(2)
-    with col_a:
-        st.subheader("Growth Progress")
-        st.write("**Height** (target: 177 cm)")
-        st.progress(min(1.0, get_height(tick) / ADULT_HEIGHT_CM))
-        st.write("**Mass** (target: 70 kg)")
-        st.progress(min(1.0, get_mass(tick) / ADULT_MASS_KG))
-        st.write("**Neural Maturation**")
-        st.progress(min(1.0, get_week(tick) / 3000))
-
-        st.divider()
-        st.subheader("Anatomy Summary")
-        st.markdown("🦴 **206 bones** — full skeleton (Vitruvian v3)")
-        st.markdown("💪 **47 major muscle groups** — Hill model F_m = A_m·F_max·f_length·f_velocity")
-        st.markdown("🫀 **25 organ systems** — brain, heart, lungs, liver, kidneys + 20 more")
-        st.markdown("🔗 **360 joints** — full kinematics, range of motion, load-bearing")
-
-    with col_b:
-        st.subheader("Physiology Engines")
-        phys = [
-            ("PHYS_01", "Circulatory",      f"HR={get_heart_rate(tick)} bpm | O2 cycling"),
-            ("PHYS_02", "Respiratory",      f"B(t)=A·sin(2πf·t) | CO2 feedback"),
-            ("PHYS_03", "Digestive",        f"ATP_food = k_digest·Calories·Digestion_rate"),
-            ("PHYS_04", "Endocrine",        f"Oestrogen=0.87 | Cortisol=f(stress)"),
-            ("PHYS_05", "Immune",           f"ImmuneState = f(pathogens, age)"),
-            ("PHYS_06", "Sleep",            f"Sleep: tick%560 < 373 | Consolidation every 800t"),
-            ("PHYS_07", "Thermoregulation", f"BodyTemp = 37°C ± f(environment)"),
-            ("PHYS_08", "Metabolic",        f"ATP(t) = max(0.2, 1-0.001·max(0,(tick%800)-400))"),
-            ("PHYS_09", "Homeostasis",      f"Drive_i(t+1) = Drive_i(t) + rate_i - satisfaction_i"),
-        ]
-        for eng, name, eq in phys:
-            st.markdown(f"✅ **{eng}** — {name} — `{eq}`")
-
-        st.divider()
-        st.subheader("Birth Data")
-        st.markdown(f"📅 **DOB:** 2026-06-07, 22:21 BST, Edinburgh, Scotland")
-        st.markdown(f"⚖️ **Birth Weight:** {BIRTH_WEIGHT_KG} kg")
-        st.markdown(f"📏 **Birth Length:** {BIRTH_HEIGHT_CM} cm")
-        st.markdown(f"🏥 **APGAR Score:** 9/10")
-        st.markdown(f"🧬 **Sex:** Female (XX chromosomes)")
-        st.markdown(f"🌱 **Genesis Seed:** {GENESIS_SEED}")
-
-# ─────────────────────────────────────────────
-# TAB 7: WORLD
-# ─────────────────────────────────────────────
-with tab7:
-    st.header("🌍 World — BeenFore City")
-
-    age = get_age_years(tick)
-    col1, col2, col3 = st.columns(3)
-    col1.metric("City",        "BeenFore City")
-    col2.metric("City Nodes",  "17")
-    col3.metric("City Edges",  "13")
-
-    st.divider()
-    st.subheader("BeenFore City — Location Map")
-    locations = [
-        ("NODE_HOSPITAL",    "Hospital (Birth)",          "Medical",     "Phase 1",  "✅"),
-        ("NODE_HOME_H8",     "Home H8 (A7DO)",            "Residential", "Phase 1",  "✅"),
-        ("NODE_HOME_H1",     "Home H1 (Alexis/Evelyn)",   "Residential", "Phase 1",  "✅"),
-        ("NODE_GARDEN",      "Garden (H8)",               "Outdoor",     "Phase 1",  "✅"),
-        ("NODE_LANE",        "BeenFore Lane",             "Street",      "Phase 1",  "✅"),
-        ("NODE_PARK",        "Neighbourhood Park",        "Outdoor",     "Phase 1",  "✅"),
-        ("NODE_PARK_PLAY",   "Park Playground",           "Outdoor",     "Phase 1",  "✅"),
-        ("NODE_NURSERY",     "Little Stars Nursery",      "Education",   "Phase 3",  "✅" if age >= 2 else "🔒"),
-        ("NODE_PRIMARY",     "Primary School",            "Education",   "Phase 4",  "✅" if age >= 4 else "🔒"),
-        ("NODE_LIBRARY",     "Public Library",            "Education",   "Phase 3",  "✅" if age >= 2 else "🔒"),
-        ("NODE_SPORTS",      "Sports Centre",             "Recreation",  "Phase 4",  "✅" if age >= 4 else "🔒"),
-        ("NODE_SHOPS",       "Local Shops",               "Commercial",  "Phase 1",  "✅"),
-        ("NODE_CAFE",        "Local Cafe",                "Social",      "Phase 1",  "✅"),
-        ("NODE_SECONDARY",   "Secondary School",          "Education",   "Phase 5",  "✅" if age >= 11 else "🔒"),
-        ("NODE_SHOPPING",    "Shopping Centre",           "Commercial",  "Phase 4",  "✅" if age >= 4 else "🔒"),
-        ("NODE_WORKPLACE",   "Workplace District",        "Office",      "Phase 7",  "✅" if age >= 23 else "🔒"),
-        ("NODE_CITY_CENTRE", "BeenFore City Centre",      "Urban",       "Phase 4",  "✅" if age >= 4 else "🔒"),
-    ]
-    col_a, col_b = st.columns(2)
-    for i, (node_id, name, loc_type, phase, status) in enumerate(locations):
-        col = col_a if i % 2 == 0 else col_b
-        col.markdown(f"{status} **{name}** ({loc_type}) — {phase}")
-
-    st.divider()
-    st.subheader("NPC Network")
-    npcs = [
-        ("Lorraine",     "Mother / Primary Caregiver",    "0.95", "F", "1989-03-14"),
-        ("China",        "Father / Secondary Caregiver",  "0.85", "M", "1987-11-02"),
-        ("Alexis",       "Aunt",                          "0.60", "F", "1989-08-20"),
-        ("Evelyn",       "Grandmother",                   "0.55", "F", "1962-05-10"),
-        ("James",        "Uncle",                         "0.40", "M", "1985-03-22"),
-        ("Olivia",       "Cousin",                        "0.35", "F", "2002-11-15"),
-        ("Dr Patel",     "Paediatrician",                 "0.45", "?", "1975-07-04"),
-        ("Grandma Rose", "Grandmother (China side)",      "0.40", "F", "1958-12-01"),
-        ("Peer 1",       "School Peer",                   "0.30", "?", "~2023"),
-        ("Teacher 1",    "Authority Figure",              "0.45", "?", "~1976"),
-    ]
-    for name, role, bond, sex, dob in npcs:
-        bond_f = float(bond)
-        st.markdown(f"👤 **{name}** — {role} | Bond: {bond} {'█' * int(bond_f * 10)}{'░' * (10 - int(bond_f * 10))}")
-
-    st.divider()
-    st.subheader("World Engines")
-    st.markdown("✅ **WORLD_01** — Gravity Engine — F = m·g (g=9.81 m/s²)")
-    st.markdown("✅ **WORLD_02** — Weather Engine — Temperature, rain, wind")
-    st.markdown("✅ **WORLD_03** — Terrain Engine — Friction, elevation, passability")
-    st.markdown("✅ **World Kernel** — 13-step causal tick loop")
-
-# ─────────────────────────────────────────────
-# TAB 8: MEMORY
-# ─────────────────────────────────────────────
-with tab8:
-    st.header("🧠 Memory Architecture")
-
-    vocab = get_vocab(tick)
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Words Known",    f"{vocab:,}")
-    col2.metric("RWM Capacity",   "262,144 slots")
-    col3.metric("Memory M(t)",    f"{get_memory(tick):.4f}")
-    col4.metric("Sleep Cycle",    f"Every 800 ticks")
-
-    st.divider()
-    st.subheader("Memory Engine Stack (SLED_MEM_01-07)")
-    mem_engines = [
-        ("SLED_MEM_01", "Sensory Memory",       "Iconic ~250ms | Echoic ~4s | Pre-attentive buffer",
-         "M_s(t) = M_s(0)·exp(-t/τ_s)  τ_s=0.25s"),
-        ("SLED_MEM_02", "Working Memory",        "7±2 items (Miller's Law) | 20-30s without rehearsal",
-         "M_WM(t) = M_WM(0)·exp(-t/τ_WM)  τ_WM=20s"),
-        ("SLED_MEM_03", "Episodic Memory",       "Autobiographical events | Power-law forgetting",
-         "m(t) = m₀·t^(-β_forget)  β=0.5"),
-        ("SLED_MEM_04", "Semantic Memory",       "Facts, concepts, word meanings | Graph G=(V,E)",
-         "Concept = 0.40·V + 0.25·A + 0.20·T + 0.10·M + 0.05·E"),
-        ("SLED_MEM_05", "Procedural Memory",     "Motor skills, habits, routines | Implicit",
-         "M(s,t+1) = M(s,t) + η·Exposure·(1-M)  η=0.015"),
-        ("SLED_MEM_06", "Consolidation Engine",  "Every 800 ticks | STM→LTM | Dream replay",
-         "LTM += 0.1·LTM during sleep ticks"),
-        ("SLED_MEM_07", "Autobiographical",      "Life narrative | Identity-tagged events",
-         "I(t) = g(M_auto(t), E(t), W(t))"),
-    ]
-    for eng, name, desc, eq in mem_engines:
-        with st.expander(f"✅ {eng} — {name}"):
-            st.markdown(f"**Description:** {desc}")
-            st.code(eq)
-
-    st.divider()
-    st.subheader("Key Autobiographical Events")
-    events = [
-        ("Day 0",   "CONCEPTION",  "Genesis Seed 735913 activates — A7DO begins"),
-        ("Day 280", "BIRTH",       "Born — umbilical severs — first cry — cold — light — Lorraine"),
-        ("Day 281", "NEWBORN",     "First hunger — Lorraine comes — first feeding — trust begins"),
-        ("Day 285", "NEWBORN",     "First word recognised: I"),
-        ("Day 290", "INFANT",      "China counts 5 steps to park — numbers learned"),
-        ("Day 300", "INFANT",      "Lorraine reads first bedtime story — stories are safe"),
-        ("Day 320", "INFANT",      "China points at duck — first animal word"),
-        ("Day 350", "INFANT",      "First hospital visit — Dr Patel — doctors help"),
-    ]
-    for day, phase, event in events:
-        st.markdown(f"📅 **{day}** [{phase}] — {event}")
-
-    st.divider()
-    st.subheader("Memory Equations")
-    st.code(
-        "Forgetting Curve: M(t) = M(0) × e^(-t/τ)  τ = emotion_weight × 100 ticks\n"
-        "Encoding:         M_new = M_old + η·salience·(1-M_old)  η=0.1\n"
-        "Recall:           M_new = M_old + 0.02 per recall\n"
-        "Consolidation:    Every 800 ticks (EQ_SLEEP_24) — STM → LTM\n"
-        "Dream Replay:     x_dream(t) ~ P(x|memory, prior)"
-    )
-
-# ─────────────────────────────────────────────
-# TAB 9: WRITER ENGINE
-# ─────────────────────────────────────────────
-with tab9:
-    st.header("✍️ Writer Engine")
-
-    sigma, z, div, atp = get_neural_physics(tick)
-    np_phase_label, np_icon = get_np_phase(div)
-    gate_open = div <= 0.6
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Gate Status",  "🟢 OPEN" if gate_open else "🔴 GATED")
-    col2.metric("Divergence",   f"{div:.4f}")
-    col3.metric("NP Phase",     f"{np_icon} {np_phase_label.split('—')[0].strip()}")
-
-    st.divider()
-    st.subheader("Generate Documents")
-
-    col_a, col_b, col_c = st.columns(3)
-    with col_a:
-        if st.button("📔 Generate Diary Entry", use_container_width=True):
-            doc = {
-                "type": "Diary",
-                "tick": tick,
-                "stamp": make_stamp(tick),
-                "content": auto_diary(tick)
-            }
-            st.session_state.documents.append(doc)
-
-    with col_b:
-        if st.button("🔬 Generate Findings Report", use_container_width=True):
-            doc = {
-                "type": "Findings",
-                "tick": tick,
-                "stamp": make_stamp(tick),
-                "content": auto_findings(tick)
-            }
-            st.session_state.documents.append(doc)
-
-    with col_c:
-        if st.button("📄 Generate Research Note", use_container_width=True):
-            doc = {
-                "type": "Research",
-                "tick": tick,
-                "stamp": make_stamp(tick),
-                "content": auto_research(tick)
-            }
-            st.session_state.documents.append(doc)
-
-    st.divider()
-    if st.session_state.documents:
-        st.subheader(f"Document Library ({len(st.session_state.documents)} documents)")
-        for i, doc in enumerate(reversed(st.session_state.documents[-10:])):
-            with st.expander(f"📄 {doc['type']} — Tick {doc['tick']:,}"):
-                st.code(doc['stamp'])
-                st.markdown(doc['content'])
-        if st.button("🗑️ Clear Library"):
-            st.session_state.documents = []
-    else:
-        st.info("No documents generated yet. Use the buttons above to generate documents.")
-
-    st.divider()
-    st.subheader("Writer Engine Specification")
-    st.markdown("**Document Types:** Diary | Research Note | Findings Report | Formal Document")
-    st.markdown("**Gate:** All output passes through SafeToSpeak gate (Div ≤ 0.6)")
-    st.markdown("**Vocabulary Filter:** Only words in RWM (87,432 words) can be used")
-    st.markdown("**Phase Gate:** Only Phase III thoughts (Div < 0.25) stored in LTM")
-    st.code(
-        "output(t) = prosody(pragmatics(grammar(semantics(intent(t)))))\n"
-        "Signed: A7DO | [timestamp]"
-    )
-
-# ─────────────────────────────────────────────
-# TAB 10: PROBLEM SOLVER
-# ─────────────────────────────────────────────
-with tab10:
-    st.header("🔬 Problem Solver")
-
-    sigma, z, div, atp = get_neural_physics(tick)
-    gate_open = div <= 0.6
-
-    st.warning(
-        "⚠️ **Important:** These are genuinely unsolved problems that no AI system can currently solve. "
-        "A7DO's solver provides a structured research framework — not claimed solutions. "
-        "Source: v29 specification Section 14."
-    )
-
-    col1, col2, col3 = st.columns(3)
-    col1.metric("Gate Status",    "🟢 OPEN" if gate_open else "🔴 GATED")
-    col2.metric("Problems Registered", "41")
-    col3.metric("Phase Required", "Phase 8+")
-
-    st.divider()
-    st.subheader("5-Step Solver Workflow")
-    steps = [
-        ("PROB_SOLVER_02", "Problem Decomposition", "Break problem into sub-problems — identify mathematical structure"),
-        ("PROB_SOLVER_03", "Theorem Search",         "Search known theorem space for applicable lemmas and results"),
-        ("PROB_SOLVER_04", "Symbolic Analysis",      "Apply symbolic manipulation — algebraic, topological, analytic"),
-        ("PROB_SOLVER_07", "Gate Check",             "Neural Physics gate — Div ≤ 0.6 required before any output"),
-        ("PROB_SOLVER_06", "Research Output",        "Generate formal research note — auto-saved to Writer library"),
-    ]
-    for i, (eng, name, desc) in enumerate(steps, 1):
-        st.markdown(f"**Step {i} ({eng})** — {name}: {desc}")
-
-    st.divider()
-    st.subheader("Problem Registry (41 problems)")
-    problems = [
-        ("Millennium Prize", "Riemann Hypothesis",              "Number Theory",       "Extreme", "$1M USD"),
-        ("Millennium Prize", "Yang-Mills Mass Gap",             "Quantum Field Theory","Extreme", "$1M USD"),
-        ("Millennium Prize", "Navier-Stokes Existence",         "Fluid Dynamics",      "Extreme", "$1M USD"),
-        ("Millennium Prize", "Birch-Swinnerton-Dyer",           "Algebraic Geometry",  "Extreme", "$1M USD"),
-        ("Millennium Prize", "Hodge Conjecture",                "Algebraic Geometry",  "Extreme", "$1M USD"),
-        ("Millennium Prize", "P vs NP",                         "Complexity Theory",   "Extreme", "$1M USD"),
-        ("Open Problem",     "Goldbach Conjecture",             "Number Theory",       "Very High","None"),
-        ("Open Problem",     "Twin Prime Conjecture",           "Number Theory",       "Very High","None"),
-        ("Open Problem",     "Collatz Conjecture",              "Number Theory",       "High",    "None"),
-        ("Grand Challenge",  "Unification of GR and QM",        "Theoretical Physics", "Extreme", "None"),
-        ("Grand Challenge",  "Quantum Gravity Equation",        "Theoretical Physics", "Extreme", "None"),
-        ("Open Problem",     "Black Hole Information Paradox",  "Theoretical Physics", "Very High","None"),
-        ("Open Problem",     "Protein Folding General Solution","Computational Biology","Very High","None"),
-        ("Engineering",      "Fusion Reactor Optimisation",     "Plasma Physics",      "Very High","None"),
-        ("Engineering",      "Global Climate Model Stabilisation","Climate Science",   "Very High","None"),
-        ("AI Research",      "Neural Architecture Search",      "AI Research",         "High",    "None"),
-    ]
-    for ptype, name, domain, difficulty, prize in problems:
-        icon = "🏆" if prize != "None" else "🔬"
-        st.markdown(f"{icon} **{name}** ({domain}) — {difficulty} — {prize}")
-
-    st.divider()
-    st.subheader("Math Capability Levels")
-    math_levels = [
-        ("Arithmetic",    "Complete", "All operations, fractions, decimals"),
-        ("Algebra",       "Complete", "Linear, quadratic, polynomial, systems"),
-        ("Geometry",      "Complete", "Euclidean, coordinate, trigonometry"),
-        ("Calculus",      "Complete", "Differential, integral, multivariable, ODEs"),
-        ("Statistics",    "Complete", "Probability, distributions, hypothesis testing"),
-        ("Number Theory", "Research", "Prime analysis, modular arithmetic"),
-        ("Topology",      "Research", "Manifolds, homology, homotopy"),
-        ("Quantum Math",  "Research", "Hilbert spaces, operators, QFT"),
-    ]
-    for level, status, desc in math_levels:
-        icon = "✅" if status == "Complete" else "🔬"
-        st.markdown(f"{icon} **{level}** ({status}) — {desc}")
-
-# ─────────────────────────────────────────────
-# TAB 11: AGI READINESS
-# ─────────────────────────────────────────────
-with tab11:
-    st.header("🤖 AGI Readiness")
-
-    conditions = get_agi_conditions(tick)
-    met = sum(1 for v, ok in conditions.values() if ok)
-    total = len(conditions)
-
-    col1, col2, col3, col4 = st.columns(4)
-    col1.metric("Conditions Met",   f"{met}/{total}")
-    col2.metric("AGI Tick Target",  f"{AGI_TICK:,}")
-    col3.metric("Current Tick",     f"{tick:,}")
-    col4.metric("Ticks to AGI",     f"{max(0, AGI_TICK - tick):,}")
-
-    st.divider()
-    st.subheader("AGI Activation Conditions")
-    for condition, (value, met_flag) in conditions.items():
-        icon = "✅" if met_flag else "❌"
-        if isinstance(value, float) and value <= 1.0:
-            st.markdown(f"{icon} **{condition}** — Current: {value:.4f}")
-            st.progress(min(1.0, value))
-        else:
-            st.markdown(f"{icon} **{condition}** — Current: {value:.4f}")
-
-    st.divider()
-    st.subheader("Developmental Milestones")
-    milestones = [
-        (DOB_TICK,      "Birth",                    "All Phase 1 systems online"),
-        (6400,          "Phase 3 — Early Cognition","Language seed, first words"),
-        (12480,         "Phase 4 — Language",       "Full language, primary school"),
-        (49920,         "Phase 5 — Social",         "Secondary school, identity formation"),
-        (IDENTITY_TICK, "Identity Activates",        "I(t) crystallisation begins"),
-        (WISDOM_TICK,   "PhD + Wisdom Activates",   "W(t) >= 0.9, PhD achieved"),
-        (AGI_TICK,      "AGI Threshold",            "All 8 conditions simultaneously met"),
-        (PHASE9_TICK,   "Phase 9 — Transpersonal",  "Beyond individual identity"),
-    ]
-    for milestone_tick, name, desc in milestones:
-        achieved = tick >= milestone_tick
-        icon = "✅" if achieved else "⬜"
-        progress_val = min(1.0, tick / milestone_tick) if milestone_tick > 0 else 1.0
-        st.markdown(f"{icon} **Tick {milestone_tick:,}** — {name} — {desc}")
-        if not achieved:
-            st.progress(progress_val)
-
-    st.divider()
-    st.subheader("Phase 8 AGI Readiness Scores")
-    phase8_scores = [
-        ("Biological body",       85, 88),
-        ("Neural dynamics",       80, 83),
-        ("Language & grounding",  65, 78),
-        ("Cognitive architecture",60, 80),
-        ("Energy & metabolism",   60, 62),
-        ("Memory systems",        55, 65),
-        ("Perception & vision",   55, 82),
-        ("Motor intelligence",    50, 78),
-        ("Consciousness & self",  50, 72),
-        ("Social & Theory of Mind",30, 68),
-        ("World & continuity",    25, 70),
-        ("Temporal cognition",    20, 45),
-    ]
-    col_a, col_b = st.columns(2)
-    for i, (domain, v1, v8) in enumerate(phase8_scores):
-        col = col_a if i % 2 == 0 else col_b
-        col.markdown(f"**{domain}**")
-        col.markdown(f"v1.0: {v1} → Phase8: {v8} (+{v8-v1})")
-        col.progress(v8 / 100)
-
-    overall_v1 = sum(s[1] for s in phase8_scores) / len(phase8_scores)
-    overall_v8 = sum(s[2] for s in phase8_scores) / len(phase8_scores)
-    st.metric("Overall AGI Readiness", f"{overall_v8:.0f}/100", delta=f"+{overall_v8-overall_v1:.0f} from v1.0")
-
-# ─────────────────────────────────────────────
-# FOOTER
-# ─────────────────────────────────────────────
-st.divider()
-st.caption(
-    "A7DO Genesis Mind v43 | Alex MacLeod — Independent Researcher — Edinburgh, Scotland | "
-    "alexmacleodreborn@icloud.com | "
-    "A7DO DOB: 2026-06-07, 22:21 BST | Sex: Female (XX) | Seed: 735913 | "
-    "Priority Date: 2020-01-01 | Patent Pending"
-)
+# ── TAB 6: CANONICAL EQUATIONS ──────────────────────────────
+with tabs[5]:
+    st.subheader("📐 Canonical Equations — All 28 Verified")
+    st.success("✅ All equations verified | Age counts from conception (Tick 0) | Priority Date: 2020-01-01")
+    col1, col2 = st.columns(2)
+    with col1:
+        st.markdown("### 🔢 Live Equation Outputs")
+        st.markdown(f"- **C(t)** = `{C(t):.6f}` — Consciousness")
+        st.markdown(f"- **W(t)** = `{W(t):.6f}` — Wisdom")
+        st.markdown(f"- **I(t)** = `{I_fn(t):.6f}` — Identity")
+        st.markdown(f"- **H(t)** = `{H(t):.2f}cm` — Height")
+        st.markdown(f"- **M(t)** = `{M(t):.3f}kg` — Mass")
+        st.markdown(f"- **HR(t)** = `{HR(t)}bpm` — Heart Rate")
+        st.markdown(f"- **ATP(t)** = `{ATP(t):.6f}` — Circadian")
+        st.markdown(f"- **V(t)** = `{V(t):,}` — Vocabulary")
+        st.markdown(f"- **P_err(t)** = `{P_err(t):.6f}` — Prediction Error")
+        gate_open, div = get_np_gate(t)
+        st.markdown(f"- **Div(t)** = `{div:.6f}` — Neural Physics Divergence")
+        st.markdown(f"- **Gate** = `{'OPEN' if gate_open else 'GATED'}` — SafeToSpeak")
+        st.markdown(f"- **Sleep** = `{'YES' if is_sleep(t) else 'NO'}` — EQ_SLEEP_24")
+        st.markdown(f"- **Grammar** = `Stage {gram_stage(t)}/6`")
+        st.markdown(f"- **Age** = `{age(t):.4f}yr` from conception")
+        st.markdown(f"- **Week** = `{wk(t):.1f}`")
+    with col2:
+        st.markdown("### 📋 Equation Registry")
+        df_eq = pd.DataFrame(CANONICAL_EQUATIONS, columns=["Eq_ID","Name","Formula","Variables","Status","Domain"])
+        st.dataframe(df_eq, use_container_width=True, height=500)
+    st.markdown("### 🐍 Python Code — Paste Directly")
+    code = f
