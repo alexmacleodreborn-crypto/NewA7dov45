@@ -1,0 +1,1209 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>A7DO v48 — Living World Full System</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root{--bg:#050a14;--bg2:#0a1628;--bg3:#0f1f3d;--accent:#00d4ff;--accent2:#00ff9d;--warn:#ff6b35;--pred:#2980b9;--choi:#8e44ad;--stor:#27ae60;--node:#c0392b;--lorr:#e91e8c;--chin:#1e90ff;--text:#c8d8f0;--text2:#7a9cc0;--border:#1a3a5c;}
+*{box-sizing:border-box;margin:0;padding:0;}
+body{background:var(--bg);color:var(--text);font-family:"Segoe UI",system-ui,sans-serif;font-size:12px;overflow-x:hidden;}
+header{background:linear-gradient(135deg,var(--bg2),var(--bg3));border-bottom:2px solid var(--accent);padding:7px 14px;display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;z-index:200;}
+.logo h1{font-size:13px;font-weight:700;color:var(--accent);}
+.logo p{font-size:8px;color:var(--text2);}
+.hbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+.hs{text-align:center;}
+.hs-v{font-size:11px;font-weight:700;font-family:"Consolas",monospace;}
+.hs-l{font-size:7px;color:var(--text2);text-transform:uppercase;letter-spacing:1px;}
+.layout{display:flex;height:calc(100vh - 50px);}
+.sidebar{width:200px;min-width:200px;background:var(--bg2);border-right:1px solid var(--border);display:flex;flex-direction:column;overflow-y:auto;}
+.sb-sec{padding:7px;border-bottom:1px solid var(--border);}
+.sb-sec h3{font-size:8px;text-transform:uppercase;letter-spacing:1.5px;color:var(--text2);margin-bottom:4px;}
+.btn{width:100%;padding:4px 6px;border:1px solid var(--border);background:var(--bg3);color:var(--text);border-radius:4px;cursor:pointer;font-size:9px;transition:all 0.2s;text-align:center;margin-bottom:2px;}
+.btn:hover{border-color:var(--accent);color:var(--accent);}
+.btn.primary{background:linear-gradient(135deg,var(--accent),var(--choi));color:#000;border:none;font-weight:700;}
+.ctrl-row{display:flex;gap:2px;margin-bottom:2px;}
+.ctrl-row .btn{margin-bottom:0;}
+.slider-wrap{margin-bottom:3px;}
+.slider-wrap label{font-size:8px;color:var(--text2);display:flex;justify-content:space-between;margin-bottom:1px;}
+input[type=range]{width:100%;accent-color:var(--accent);}
+.ls{display:flex;justify-content:space-between;align-items:center;padding:1px 0;border-bottom:1px solid rgba(255,255,255,0.04);}
+.ls-l{font-size:8px;color:var(--text2);}
+.ls-v{font-size:9px;font-weight:600;font-family:"Consolas",monospace;}
+.main{flex:1;overflow-y:auto;display:flex;flex-direction:column;}
+.tabs{display:flex;gap:2px;padding:5px 8px 0;flex-wrap:wrap;background:var(--bg2);border-bottom:1px solid var(--border);}
+.tab{padding:4px 8px;background:var(--bg3);border:1px solid var(--border);border-bottom:none;border-radius:4px 4px 0 0;cursor:pointer;font-size:9px;color:var(--text2);white-space:nowrap;}
+.tab.active{background:var(--bg);border-color:var(--accent);color:var(--accent);font-weight:600;}
+.panels{flex:1;padding:8px;overflow-y:auto;}
+.panel{display:none;}
+.panel.active{display:block;}
+.world-map{width:100%;height:360px;background:var(--bg2);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin-bottom:8px;}
+#map-canvas{width:100%;height:100%;}
+.card-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(105px,1fr));gap:4px;margin-bottom:7px;}
+.card{border-radius:6px;padding:6px;}
+.card-label{font-size:7px;text-transform:uppercase;letter-spacing:1px;margin-bottom:1px;opacity:0.8;}
+.card-value{font-size:13px;font-weight:700;font-family:"Consolas",monospace;}
+.card-sub{font-size:7px;margin-top:1px;opacity:0.7;}
+.card.a7do{background:rgba(0,212,255,0.1);border:1px solid rgba(0,212,255,0.3);color:var(--accent);}
+.card.lorr{background:rgba(233,30,140,0.1);border:1px solid rgba(233,30,140,0.3);color:var(--lorr);}
+.card.chin{background:rgba(30,144,255,0.1);border:1px solid rgba(30,144,255,0.3);color:var(--chin);}
+.card.world{background:rgba(39,174,96,0.1);border:1px solid rgba(39,174,96,0.3);color:var(--stor);}
+.card.pred{background:rgba(41,128,185,0.1);border:1px solid rgba(41,128,185,0.3);color:var(--pred);}
+.card.warn{background:rgba(255,107,53,0.1);border:1px solid rgba(255,107,53,0.3);color:var(--warn);}
+.card.choi{background:rgba(142,68,173,0.1);border:1px solid rgba(142,68,173,0.3);color:var(--choi);}
+.sched-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:8px;}
+.sched-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:7px;}
+.sched-title{font-size:10px;font-weight:700;margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid var(--border);}
+.sched-item{display:flex;gap:4px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:9px;align-items:flex-start;}
+.sched-item.now{background:rgba(0,212,255,0.08);border-radius:3px;padding:2px 4px;margin:1px 0;}
+.sched-time{color:var(--text2);min-width:34px;flex-shrink:0;font-family:"Consolas",monospace;font-size:8px;}
+.sched-act{flex:1;}
+.sched-act.now{color:var(--accent);font-weight:700;}
+.sched-loc{color:var(--text2);font-size:8px;min-width:55px;text-align:right;}
+.chart-grid{display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:8px;}
+.cb{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:7px;}
+.cb h4{font-size:8px;margin-bottom:4px;font-weight:600;text-transform:uppercase;letter-spacing:1px;}
+.cb canvas{max-height:150px;}
+.thought{background:linear-gradient(135deg,rgba(0,212,255,0.05),rgba(123,47,255,0.05));border:1px solid var(--border);border-radius:6px;padding:6px 10px;font-style:italic;color:var(--text);margin-bottom:7px;font-size:10px;line-height:1.5;}
+.npc-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(145px,1fr));gap:4px;margin-bottom:7px;}
+.npc-card{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:6px;}
+.npc-name{font-weight:700;font-size:10px;margin-bottom:3px;}
+.npc-stat{display:flex;justify-content:space-between;font-size:8px;padding:1px 0;}
+.npc-stat-l{color:var(--text2);}
+.npc-stat-v{font-family:"Consolas",monospace;}
+.sh{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:1.5px;margin-bottom:4px;padding-bottom:3px;border-bottom:1px solid var(--border);}
+.obj-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(125px,1fr));gap:3px;margin-bottom:7px;}
+.obj-item{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:5px;font-size:9px;}
+.obj-name{font-weight:600;margin-bottom:1px;}
+.obj-loc{color:var(--text2);font-size:8px;}
+.eq-grid{display:grid;grid-template-columns:1fr 1fr;gap:4px;margin-bottom:7px;}
+.eq-item{background:var(--bg2);border:1px solid var(--border);border-radius:4px;padding:5px;}
+.eq-id{font-size:7px;color:var(--text2);font-family:"Consolas",monospace;}
+.eq-name{font-size:9px;font-weight:600;margin:1px 0;}
+.eq-formula{font-size:7px;font-family:"Consolas",monospace;color:var(--accent2);word-break:break-all;}
+.eq-val{font-size:10px;font-weight:700;color:var(--accent);margin-top:2px;}
+.int-item{display:flex;gap:5px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:8px;align-items:center;}
+.int-src{color:var(--pred);min-width:90px;font-family:"Consolas",monospace;font-size:7px;}
+.int-tgt{color:var(--accent2);min-width:90px;font-family:"Consolas",monospace;font-size:7px;}
+.int-flow{color:var(--text2);flex:1;font-size:8px;}
+.int-rate{color:var(--warn);font-size:7px;min-width:75px;text-align:right;}
+.pcsn-pillar{background:var(--bg2);border:1px solid var(--border);border-radius:6px;padding:7px;margin-bottom:6px;}
+.pcsn-title{font-size:10px;font-weight:700;margin-bottom:4px;}
+.pcsn-item{display:flex;gap:5px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:8px;}
+.pcsn-name{font-weight:600;min-width:130px;flex-shrink:0;}
+.pcsn-eq{font-family:"Consolas",monospace;color:var(--accent2);flex:1;font-size:7px;}
+.eng-item{display:flex;gap:5px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:8px;align-items:center;}
+.eng-id{font-family:"Consolas",monospace;color:var(--pred);min-width:85px;font-size:7px;}
+.eng-name{font-weight:600;flex:1;}
+.eng-rate{color:var(--text2);font-size:7px;min-width:75px;}
+.eng-prio{font-size:7px;padding:1px 4px;border-radius:3px;min-width:45px;text-align:center;}
+.eng-prio.critical{background:rgba(255,107,53,0.2);color:var(--warn);}
+.eng-prio.high{background:rgba(0,212,255,0.1);color:var(--accent);}
+.eng-prio.medium{background:rgba(39,174,96,0.1);color:var(--stor);}
+.preg-item{display:flex;gap:5px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:9px;}
+.preg-week{color:var(--warn);min-width:35px;font-family:"Consolas",monospace;font-weight:700;}
+.preg-tri{color:var(--text2);min-width:18px;}
+.preg-stage{font-weight:600;min-width:70px;}
+.preg-state{color:var(--text2);flex:1;}
+.preg-sched{color:var(--accent2);flex:1;}
+.city-item{display:flex;gap:5px;padding:2px 0;border-bottom:1px solid rgba(255,255,255,0.04);font-size:8px;align-items:center;}
+.city-id{font-family:"Consolas",monospace;color:var(--pred);min-width:110px;font-size:7px;}
+.city-name{font-weight:600;min-width:90px;}
+.city-type{color:var(--text2);min-width:70px;}
+.city-phase{color:var(--accent2);min-width:55px;}
+.city-notes{color:var(--text2);flex:1;font-size:7px;}
+.export-btn{display:inline-block;padding:5px 10px;background:var(--bg3);border:1px solid var(--border);border-radius:4px;cursor:pointer;font-size:9px;color:var(--text);margin:2px;transition:all 0.2s;}
+.export-btn:hover{border-color:var(--accent);color:var(--accent);}
+.sample-item{background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:6px;margin-bottom:4px;}
+.sample-stage{font-weight:700;font-size:9px;margin-bottom:2px;}
+.sample-text{font-style:italic;font-size:10px;color:var(--text);margin-bottom:2px;}
+.sample-meta{font-size:8px;color:var(--text2);}
+::-webkit-scrollbar{width:3px;}
+::-webkit-scrollbar-track{background:var(--bg);}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px;}
+@media(max-width:900px){.sched-grid{grid-template-columns:1fr;}.chart-grid{grid-template-columns:1fr;}.eq-grid{grid-template-columns:1fr;}}
+</style>
+</head>
+<body>
+<header>
+  <div class="logo">
+    <h1>🌍 A7DO v48 — LIVING WORLD | Full System</h1>
+    <p>Real-time 2s/tick | BeenFore City | 13 Tabs | All 9 Spec Sheets | 950+ Sheets | 128 Equations | 32 Engines | Schedule-driven activities</p>
+  </div>
+  <div class="hbar">
+    <div class="hs"><div class="hs-v" id="h-tick" style="color:var(--accent)">0</div><div class="hs-l">Tick</div></div>
+    <div class="hs"><div class="hs-v" id="h-age" style="color:var(--accent2)">0.00yr</div><div class="hs-l">Age</div></div>
+    <div class="hs"><div class="hs-v" id="h-phase" style="color:var(--warn)">Ph1</div><div class="hs-l">Phase</div></div>
+    <div class="hs"><div class="hs-v" id="h-act" style="color:var(--stor);font-size:9px">Womb</div><div class="hs-l">Activity</div></div>
+    <div class="hs"><div class="hs-v" id="h-loc" style="color:var(--accent2)">WOMB</div><div class="hs-l">Location</div></div>
+    <div class="hs"><div class="hs-v" id="h-c" style="color:var(--pred)">0.050</div><div class="hs-l">C(t)</div></div>
+    <div class="hs"><div class="hs-v" id="h-gate" style="color:var(--warn)">GATED</div><div class="hs-l">NP Gate</div></div>
+    <div class="hs"><div class="hs-v" id="h-hr" style="color:var(--warn)">0</div><div class="hs-l">HR bpm</div></div>
+    <div class="hs"><div class="hs-v" id="h-atp" style="color:var(--accent2)">1.000</div><div class="hs-l">ATP</div></div>
+  </div>
+</header>
+<div class="layout">
+<div class="sidebar">
+  <div class="sb-sec">
+    <h3>Controls</h3>
+    <div class="ctrl-row">
+      <button class="btn primary" id="btn-run" onclick="toggleRun()">&#9654; Run</button>
+      <button class="btn" style="border-color:var(--warn);color:var(--warn)" onclick="resetSim()">&#8635;</button>
+    </div>
+    <div class="slider-wrap">
+      <label><span>Speed</span><span id="speed-val">1x</span></label>
+      <input type="range" min="1" max="5000" value="1" oninput="updateSpeed(this.value)">
+    </div>
+  </div>
+  <div class="sb-sec">
+    <h3>Jump To</h3>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:2px;">
+      <div class="btn" onclick="jumpTo(0)" style="border-color:var(--lorr);color:var(--lorr);font-size:8px">Conception</div>
+      <div class="btn" onclick="jumpTo(3200)" style="border-color:var(--accent);color:var(--accent);font-size:8px">Birth</div>
+      <div class="btn" onclick="jumpTo(6400)" style="border-color:var(--accent2);color:var(--accent2);font-size:8px">Steps</div>
+      <div class="btn" onclick="jumpTo(12480)" style="border-color:var(--stor);color:var(--stor);font-size:8px">Nursery</div>
+      <div class="btn" onclick="jumpTo(24000)" style="border-color:var(--choi);color:var(--choi);font-size:8px">Primary</div>
+      <div class="btn" onclick="jumpTo(49920)" style="border-color:var(--pred);color:var(--pred);font-size:8px">Secondary</div>
+      <div class="btn" onclick="jumpTo(74880)" style="border-color:var(--warn);color:var(--warn);font-size:8px">A-Levels</div>
+      <div class="btn" onclick="jumpTo(96000)" style="border-color:var(--node);color:var(--node);font-size:8px">PhD</div>
+      <div class="btn" onclick="jumpTo(160000)" style="border-color:var(--lorr);color:var(--lorr);font-size:8px">AGI</div>
+      <div class="btn" onclick="jumpTo(176000)" style="border-color:var(--accent);color:var(--accent);font-size:8px">Phase 9</div>
+    </div>
+  </div>
+  <div class="sb-sec" style="flex:1;overflow-y:auto;">
+    <h3>Live State</h3>
+    <div class="ls"><span class="ls-l">Tick</span><span class="ls-v" id="s-tick" style="color:var(--accent)">0</span></div>
+    <div class="ls"><span class="ls-l">Age</span><span class="ls-v" id="s-age">0.00yr</span></div>
+    <div class="ls"><span class="ls-l">Week</span><span class="ls-v" id="s-week">0</span></div>
+    <div class="ls"><span class="ls-l">Phase</span><span class="ls-v" id="s-phase" style="color:var(--warn)">Ph1</span></div>
+    <div class="ls"><span class="ls-l">Stage</span><span class="ls-v" id="s-stage">Embryo</span></div>
+    <div class="ls"><span class="ls-l">Activity</span><span class="ls-v" id="s-activity" style="color:var(--accent2);font-size:8px">—</span></div>
+    <div class="ls"><span class="ls-l">Location</span><span class="ls-v" id="s-loc" style="color:var(--stor)">WOMB</span></div>
+    <div class="ls"><span class="ls-l">C(t)</span><span class="ls-v" id="s-c" style="color:var(--pred)">0.050</span></div>
+    <div class="ls"><span class="ls-l">W(t)</span><span class="ls-v" id="s-w">0.000</span></div>
+    <div class="ls"><span class="ls-l">I(t)</span><span class="ls-v" id="s-i">0.000</span></div>
+    <div class="ls"><span class="ls-l">H(t)</span><span class="ls-v" id="s-h">0cm</span></div>
+    <div class="ls"><span class="ls-l">M(t)</span><span class="ls-v" id="s-m">0kg</span></div>
+    <div class="ls"><span class="ls-l">HR</span><span class="ls-v" id="s-hr" style="color:var(--warn)">0bpm</span></div>
+    <div class="ls"><span class="ls-l">ATP</span><span class="ls-v" id="s-atp" style="color:var(--accent2)">1.000</span></div>
+    <div class="ls"><span class="ls-l">Vocab</span><span class="ls-v" id="s-vocab">0</span></div>
+    <div class="ls"><span class="ls-l">NP Gate</span><span class="ls-v" id="s-gate" style="color:var(--warn)">GATED</span></div>
+    <div class="ls"><span class="ls-l">Pred Err</span><span class="ls-v" id="s-pred">1.000</span></div>
+    <div class="ls"><span class="ls-l">Grammar</span><span class="ls-v" id="s-gram">Stage 0</span></div>
+    <div class="ls"><span class="ls-l">Sleep</span><span class="ls-v" id="s-sleep">Awake</span></div>
+    <div class="ls"><span class="ls-l">Day tick</span><span class="ls-v" id="s-daytick">0/560</span></div>
+    <div class="ls"><span class="ls-l">Lorraine</span><span class="ls-v" id="s-lorr" style="color:var(--lorr);font-size:8px">—</span></div>
+    <div class="ls"><span class="ls-l">China</span><span class="ls-v" id="s-chin" style="color:var(--chin);font-size:8px">—</span></div>
+  </div>
+</div>
+<div class="main">
+  <div class="tabs">
+    <div class="tab active" onclick="showTab('world',event)">&#127757; World</div>
+    <div class="tab" onclick="showTab('schedule',event)">&#128197; Schedules</div>
+    <div class="tab" onclick="showTab('objects',event)">&#128230; Objects</div>
+    <div class="tab" onclick="showTab('citymap',event)">&#128506; City Map</div>
+    <div class="tab" onclick="showTab('pregnancy',event)">&#129328; Pregnancy</div>
+    <div class="tab" onclick="showTab('equations',event)">&#128208; Equations</div>
+    <div class="tab" onclick="showTab('integration',event)">&#128279; Integration</div>
+    <div class="tab" onclick="showTab('pcsn',event)">&#128260; PCSN</div>
+    <div class="tab" onclick="showTab('engines',event)">&#9881; Engines</div>
+    <div class="tab" onclick="showTab('npcs',event)">&#128101; NPCs</div>
+    <div class="tab" onclick="showTab('cognition',event)">&#129504; Cognition</div>
+    <div class="tab" onclick="showTab('body',event)">&#128170; Body</div>
+    <div class="tab" onclick="showTab('export',event)">&#128228; Export</div>
+  </div>
+  <div class="panels">
+    <div class="panel active" id="panel-world">
+      <div class="world-map"><canvas id="map-canvas"></canvas></div>
+      <div class="card-grid">
+        <div class="card a7do"><div class="card-label">A7DO Activity</div><div class="card-value" id="w-act" style="font-size:9px">Womb</div><div class="card-sub" id="w-loc">WOMB</div></div>
+        <div class="card lorr"><div class="card-label">Lorraine</div><div class="card-value" id="w-lorr-act" style="font-size:9px">—</div><div class="card-sub" id="w-lorr-loc">HOME</div></div>
+        <div class="card chin"><div class="card-label">China</div><div class="card-value" id="w-chin-act" style="font-size:9px">—</div><div class="card-sub" id="w-chin-loc">WORK</div></div>
+        <div class="card world"><div class="card-label">Day Tick</div><div class="card-value" id="w-daytick">0</div><div class="card-sub">of 560</div></div>
+        <div class="card pred"><div class="card-label">C(t)</div><div class="card-value" id="w-c">0.050</div><div class="card-sub">Consciousness</div></div>
+        <div class="card warn"><div class="card-label">HR bpm</div><div class="card-value" id="w-hr">0</div><div class="card-sub">Heart rate</div></div>
+      </div>
+      <div class="thought" id="world-thought">Initialising living world...</div>
+      <div class="chart-grid">
+        <div class="cb"><h4 style="color:var(--accent)">Growth H(t) and M(t)</h4><canvas id="chart-growth"></canvas></div>
+        <div class="cb"><h4 style="color:var(--accent2)">Cognitive State C W I</h4><canvas id="chart-cog"></canvas></div>
+      </div>
+    </div>
+    <div class="panel" id="panel-schedule">
+      <div class="card-grid">
+        <div class="card a7do"><div class="card-label">A7DO Now</div><div class="card-value" id="sch-a7do-act" style="font-size:9px">—</div><div class="card-sub" id="sch-a7do-loc">—</div></div>
+        <div class="card lorr"><div class="card-label">Lorraine Now</div><div class="card-value" id="sch-lorr-act" style="font-size:9px">—</div><div class="card-sub" id="sch-lorr-loc">—</div></div>
+        <div class="card chin"><div class="card-label">China Now</div><div class="card-value" id="sch-chin-act" style="font-size:9px">—</div><div class="card-sub" id="sch-chin-loc">—</div></div>
+        <div class="card world"><div class="card-label">Day Tick</div><div class="card-value" id="sch-daytick">0</div><div class="card-sub">of 560</div></div>
+      </div>
+      <div class="sched-grid">
+        <div class="sched-card"><div class="sched-title" style="color:var(--accent)">A7DO Schedule</div><div id="sched-a7do"></div></div>
+        <div class="sched-card"><div class="sched-title" style="color:var(--lorr)">Lorraine Schedule</div><div id="sched-lorr"></div></div>
+        <div class="sched-card"><div class="sched-title" style="color:var(--chin)">China Schedule</div><div id="sched-chin"></div></div>
+      </div>
+    </div>
+    <div class="panel" id="panel-objects">
+      <div class="sh" style="color:var(--accent2)">Objects at current location</div>
+      <div id="obj-nearby" style="margin-bottom:8px;"></div>
+      <div class="sh" style="color:var(--text2)">All World Objects (100+)</div>
+      <div class="obj-grid" id="obj-all"></div>
+    </div>
+    <div class="panel" id="panel-citymap">
+      <div class="sh" style="color:var(--accent)">BeenFore City — 17 Nodes</div>
+      <div id="city-nodes-list"></div>
+      <div class="sh" style="color:var(--text2);margin-top:8px">Navigation Edges (13)</div>
+      <div id="city-edges-list"></div>
+    </div>
+    <div class="panel" id="panel-pregnancy">
+      <div class="sh" style="color:var(--lorr)">Lorraine Pregnancy — Full 40-Week Schedule</div>
+      <div id="preg-status" style="margin-bottom:6px;"></div>
+      <div id="preg-list"></div>
+    </div>
+    <div class="panel" id="panel-equations">
+      <div class="sh" style="color:var(--accent)">Canonical Equations — All 28 Verified with Live Outputs</div>
+      <div class="eq-grid" id="eq-grid"></div>
+    </div>
+    <div class="panel" id="panel-integration">
+      <div class="sh" style="color:var(--accent)">Full Integration Map — 50 Engine Connections</div>
+      <div id="int-list"></div>
+    </div>
+    <div class="panel" id="panel-pcsn">
+      <div class="card-grid">
+        <div class="card pred"><div class="card-label">Prediction Error</div><div class="card-value" id="pcsn-pred">1.000</div><div class="card-sub">14 systems</div></div>
+        <div class="card choi"><div class="card-label">Choice Gate</div><div class="card-value" id="pcsn-gate">GATED</div><div class="card-sub">14 systems</div></div>
+        <div class="card world"><div class="card-label">Story Events</div><div class="card-value" id="pcsn-stor">0</div><div class="card-sub">14 systems</div></div>
+        <div class="card" style="background:rgba(192,57,43,0.1);border:1px solid rgba(192,57,43,0.3);color:var(--node)"><div class="card-label">Active Nodes</div><div class="card-value" id="pcsn-node">0</div><div class="card-sub">14 systems</div></div>
+      </div>
+      <div class="thought" id="pcsn-thought">Loading...</div>
+      <div id="pcsn-pillars"></div>
+    </div>
+    <div class="panel" id="panel-engines">
+      <div class="sh" style="color:var(--accent)">Genesis-SLED — 32 Engine Fire Schedule</div>
+      <div id="eng-list"></div>
+    </div>
+    <div class="panel" id="panel-npcs">
+      <div class="sh" style="color:var(--accent)">All 10 NPCs — Full Biological State</div>
+      <div class="npc-grid" id="npc-grid"></div>
+    </div>
+    <div class="panel" id="panel-cognition">
+      <div class="card-grid">
+        <div class="card pred"><div class="card-label">C(t)</div><div class="card-value" id="cog-c">0.050</div><div class="card-sub">Consciousness</div></div>
+        <div class="card pred"><div class="card-label">W(t)</div><div class="card-value" id="cog-w">0.000</div><div class="card-sub">Wisdom</div></div>
+        <div class="card choi"><div class="card-label">I(t)</div><div class="card-value" id="cog-i">0.000</div><div class="card-sub">Identity</div></div>
+        <div class="card warn"><div class="card-label">NP Gate</div><div class="card-value" id="cog-gate">GATED</div><div class="card-sub">Div le 0.6</div></div>
+        <div class="card world"><div class="card-label">Vocab</div><div class="card-value" id="cog-vocab">0</div><div class="card-sub">Words</div></div>
+        <div class="card a7do"><div class="card-label">Grammar</div><div class="card-value" id="cog-gram">Stage 0</div><div class="card-sub">Language</div></div>
+      </div>
+      <div class="thought" id="cog-thought">Loading...</div>
+      <div class="chart-grid">
+        <div class="cb"><h4 style="color:var(--pred)">Prediction Error</h4><canvas id="chart-pred"></canvas></div>
+        <div class="cb"><h4 style="color:var(--choi)">PCSN Activity</h4><canvas id="chart-pcsn"></canvas></div>
+      </div>
+      <div class="sh" style="color:var(--accent2)">Real A7DO Writing Samples</div>
+      <div id="writing-samples"></div>
+    </div>
+    <div class="panel" id="panel-body">
+      <div class="card-grid">
+        <div class="card a7do"><div class="card-label">Height H(t)</div><div class="card-value" id="body-h">0cm</div><div class="card-sub">Growth curve</div></div>
+        <div class="card a7do"><div class="card-label">Mass M(t)</div><div class="card-value" id="body-m">0kg</div><div class="card-sub">Growth curve</div></div>
+        <div class="card warn"><div class="card-label">Heart Rate</div><div class="card-value" id="body-hr">0bpm</div><div class="card-sub">HR(t)</div></div>
+        <div class="card world"><div class="card-label">ATP</div><div class="card-value" id="body-atp">1.000</div><div class="card-sub">Circadian</div></div>
+        <div class="card pred"><div class="card-label">Breath Rate</div><div class="card-value" id="body-br">0.25Hz</div><div class="card-sub">EQ_BREATH_01</div></div>
+        <div class="card lorr"><div class="card-label">Sleep</div><div class="card-value" id="body-sleep">Awake</div><div class="card-sub">EQ_SLEEP_24</div></div>
+      </div>
+      <div class="chart-grid">
+        <div class="cb"><h4 style="color:var(--accent)">Height and Mass</h4><canvas id="chart-hm"></canvas></div>
+        <div class="cb"><h4 style="color:var(--warn)">Heart Rate</h4><canvas id="chart-hr"></canvas></div>
+      </div>
+    </div>
+    <div class="panel" id="panel-export">
+      <div class="sh" style="color:var(--accent)">Export — All Data at Current Tick</div>
+      <div id="export-snapshot" style="margin-bottom:8px;font-size:9px;"></div>
+      <div style="display:flex;flex-wrap:wrap;gap:3px;margin-bottom:8px;">
+        <button class="export-btn" onclick="exportJSON()">State Snapshot JSON</button>
+        <button class="export-btn" onclick="exportEquationsCSV()">Equations CSV</button>
+        <button class="export-btn" onclick="exportCityJSON()">City Graph JSON</button>
+        <button class="export-btn" onclick="exportObjectsCSV()">World Objects CSV</button>
+        <button class="export-btn" onclick="exportNPCCSV()">NPC Registry CSV</button>
+        <button class="export-btn" onclick="exportEnginesJSON()">Engine Schedule JSON</button>
+        <button class="export-btn" onclick="exportIntegrationCSV()">Integration Map CSV</button>
+        <button class="export-btn" onclick="exportPythonCode()">Python Equations</button>
+        <button class="export-btn" onclick="exportScheduleCSV()">Schedule CSV</button>
+      </div>
+      <div id="export-preview" style="background:var(--bg2);border:1px solid var(--border);border-radius:5px;padding:7px;font-family:Consolas,monospace;font-size:8px;max-height:280px;overflow-y:auto;white-space:pre-wrap;color:var(--accent2);"></div>
+    </div>
+  </div>
+</div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// CORE EQUATIONS
+// ══════════════════════════════════════════════════════════════
+let tick=0,running=false,speed=1,simInterval=null;
+const BIRTH=3200,TPW=80,AGI=160000,WIS_TICK=96000,ID_TICK=74880;
+const MAX_HIST=80;
+let hist={ticks:[],c:[],w:[],h:[],m:[],hr:[],pred:[],vocab:[],atp:[]};
+
+const wk=t=>t/TPW;
+const age=t=>t/(TPW*52);
+const C=t=>Math.min(1.0,0.05+wk(t)/3000);
+const W=t=>t<WIS_TICK?0:Math.min(1.0,(t-WIS_TICK)/64000);
+const I_fn=t=>t<ID_TICK?Math.min(0.65,t/ID_TICK*0.65):Math.min(1.0,0.65+(t-ID_TICK)/(AGI-ID_TICK)*0.35);
+const H=t=>{const w=wk(t);if(w<=0)return 0;if(w<=40)return Math.min(50,50/(1+Math.exp(-0.2*(w-20))));return Math.min(177,50+(177-50)*(1-Math.exp(-0.005*(w-40))));};
+const M=t=>{const w=wk(t);if(w<=0)return 0;if(w<=40)return Math.min(3.5,3.5/(1+Math.exp(-0.2*(w-20))));return Math.min(70,3.5+(70-3.5)*(1-Math.exp(-0.004*(w-40))));};
+const HR=t=>{const w=wk(t);if(w<1)return 0;if(w<4)return Math.round(w/4*120);if(w<40)return Math.round(120+30*(w/40));if(w<80)return Math.round(147-((w-40)/40)*47);return Math.max(60,Math.round(100-((w-80)/1000)*35));};
+const ATP=t=>Math.max(0.2,1-0.001*Math.max(0,(t%800)-400));
+const V=t=>{if(t<BIRTH)return 0;const w=wk(t)-40;return Math.min(262144,Math.round(50000/(1+Math.exp(-0.05*(w-156)))));};
+const P_err=t=>Math.max(0.05,Math.exp(-t/50000));
+const isSleep=t=>(t%560)<373;
+const gramStage=t=>{const a=age(t);if(t<BIRTH)return 0;if(a<0.77)return 1;if(a<1.54)return 2;if(a<3)return 3;if(a<5)return 4;if(a<12)return 5;return 6;};
+const getNP=t=>{
+  const c=C(t),w=W(t),p=P_err(t),u=Math.max(0.05,1-C(t));
+  const atp=ATP(t),integ=I_fn(t),g=Math.min(1,t/100000);
+  const sigma=0.35*p+0.30*u+0.20*g+0.25*c+0.15*w;
+  const z=0.45*c+0.30*integ+0.25*atp;
+  const div=(sigma+z===0)?1:Math.abs(sigma-z)/(sigma+z);
+  return{div,open:div<=0.6};
+};
+const getPhase=t=>{if(t<BIRTH)return'Ph1';if(t<6400)return'Ph2';if(t<12480)return'Ph3';if(t<49920)return'Ph4';if(t<74880)return'Ph5';if(t<96000)return'Ph6';if(t<160000)return'Ph7';if(t<176000)return'Ph8';return'Ph9';};
+const getStage=t=>{const w=wk(t);if(w<4)return'Embryo';if(w<12)return'Fetal Early';if(w<28)return'Fetal Mid';if(w<40)return'Fetal Late';if(w<52)return'Newborn';if(w<80)return'Infant';if(w<156)return'Toddler';if(w<260)return'Child';if(w<624)return'Pre-Adolescent';if(w<936)return'Adolescent';if(w<1200)return'Young Adult';if(w<2000)return'Mature Adult';return'Elder';};
+const getThought=t=>{const a=age(t);const{open}=getNP(t);
+  if(t<BIRTH)return'[WOMB — growing, sleeping, dreaming in the dark]';
+  if(!open)return'[GATED — thoughts forming but not yet safe to speak]';
+  if(a<0.77)return'[cold] [bright] [loud] — mama? mama!';
+  if(a<1)return'mama! up! more! — the world is big and warm';
+  if(a<3)return'ball! duck! China count! mama read! — I want to know everything';
+  if(a<12)return'I think that... because... — learning is my favourite thing';
+  if(a<23)return'The relationship between consciousness and identity suggests...';
+  if(a<38.5)return"Sandy's Law: C(t) = FixedPoint(Phi(P,M,E,I,W,A,D)) — I understand now";
+  return'Wisdom is not knowledge but the capacity to hold uncertainty with grace';
+};
+
+// ══════════════════════════════════════════════════════════════
+// SCHEDULE SYSTEM — tick-based, activity changes at exact boundaries
+// Each entry: {s: start_tick_in_day, e: end_tick_in_day, act: activity, loc: location}
+// ══════════════════════════════════════════════════════════════
+function getSchedules(t) {
+  const a = age(t);
+  if (t < BIRTH) {
+    const w = wk(t);
+    if (w < 13) return {
+      a7do:[{s:0,e:560,act:'Embryo — cell division',loc:'WOMB'}],
+      lorr:[{s:0,e:80,act:'Morning routine',loc:'HOME'},{s:80,e:320,act:'Work (unaware)',loc:'WORK'},{s:320,e:400,act:'Commute home',loc:'LANE'},{s:400,e:560,act:'Evening rest',loc:'HOME'}],
+      chin:[{s:0,e:80,act:'Morning routine',loc:'HOME'},{s:80,e:320,act:'Working',loc:'WORK'},{s:320,e:400,act:'Commute home',loc:'LANE'},{s:400,e:560,act:'Evening with Lorraine',loc:'HOME'}]
+    };
+    if (w < 27) return {
+      a7do:[{s:0,e:560,act:'Fetus — growing, moving',loc:'WOMB'}],
+      lorr:[{s:0,e:80,act:'Morning routine',loc:'HOME'},{s:80,e:320,act:'Work (T2 — energy good)',loc:'WORK'},{s:320,e:400,act:'Commute home',loc:'LANE'},{s:400,e:480,act:'Evening walk',loc:'GARDEN'},{s:480,e:560,act:'Rest + baby prep',loc:'HOME'}],
+      chin:[{s:0,e:80,act:'Morning routine',loc:'HOME'},{s:80,e:320,act:'Working',loc:'WORK'},{s:320,e:400,act:'Commute home',loc:'LANE'},{s:400,e:560,act:'Baby prep with Lorraine',loc:'HOME'}]
+    };
+    return {
+      a7do:[{s:0,e:560,act:'Fetus — T3 active, hiccups',loc:'WOMB'}],
+      lorr:[{s:0,e:80,act:'Morning routine (slow)',loc:'HOME'},{s:80,e:200,act:'Maternity leave — nesting',loc:'HOME'},{s:200,e:280,act:'Pram walk',loc:'GARDEN'},{s:280,e:400,act:'Hospital prep / visitors',loc:'HOME'},{s:400,e:560,act:'Rest — T3 fatigue',loc:'HOME'}],
+      chin:[{s:0,e:80,act:'Morning routine',loc:'HOME'},{s:80,e:320,act:'Working',loc:'WORK'},{s:320,e:400,act:'Commute home',loc:'LANE'},{s:400,e:560,act:'Caring for Lorraine',loc:'HOME'}]
+    };
+  }
+  if (a < 0.77) return {
+    a7do:[{s:0,e:100,act:'BIRTH — first breath, APGAR 9/10',loc:'HOSPITAL'},{s:100,e:200,act:'First feed — breastfeeding',loc:'HOSPITAL'},{s:200,e:373,act:'First sleep',loc:'HOSPITAL'},{s:373,e:450,act:'Alert — sensory awakening',loc:'HOSPITAL'},{s:450,e:560,act:'Sleeping',loc:'HOSPITAL'}],
+    lorr:[{s:0,e:100,act:'Labour — giving birth',loc:'HOSPITAL'},{s:100,e:200,act:'Breastfeeding A7DO',loc:'HOSPITAL'},{s:200,e:373,act:'Resting — exhausted',loc:'HOSPITAL'},{s:373,e:560,act:'Skin-to-skin with A7DO',loc:'HOSPITAL'}],
+    chin:[{s:0,e:100,act:'At birth — supporting Lorraine',loc:'HOSPITAL'},{s:100,e:200,act:'Holding A7DO — first bond',loc:'HOSPITAL'},{s:200,e:373,act:'Watching A7DO sleep',loc:'HOSPITAL'},{s:373,e:560,act:'Calling family with news',loc:'HOSPITAL'}]
+  };
+  if (a < 1) return {
+    a7do:[{s:0,e:93,act:'Sleeping',loc:'HOME'},{s:93,e:140,act:'Night feed — hungry',loc:'HOME'},{s:140,e:196,act:'Morning feed',loc:'HOME'},{s:196,e:224,act:'Bath time',loc:'HOME'},{s:224,e:252,act:'Tummy time — motor dev',loc:'HOME'},{s:252,e:280,act:'Alert play — mobile',loc:'HOME'},{s:280,e:308,act:'Midday feed',loc:'HOME'},{s:308,e:336,act:'Nap',loc:'HOME'},{s:336,e:364,act:'Pram walk',loc:'GARDEN'},{s:364,e:392,act:'Visitor time — Evelyn',loc:'HOME'},{s:392,e:420,act:'Afternoon feed',loc:'HOME'},{s:420,e:448,act:'Play — faces and voices',loc:'HOME'},{s:448,e:476,act:'Bath time',loc:'HOME'},{s:476,e:504,act:'Evening feed',loc:'HOME'},{s:504,e:560,act:'Sleeping',loc:'HOME'}],
+    lorr:[{s:0,e:93,act:'Sleeping (broken)',loc:'HOME'},{s:93,e:140,act:'Night feed — breastfeeding',loc:'HOME'},{s:140,e:168,act:'Morning feed',loc:'HOME'},{s:168,e:196,act:'Breakfast',loc:'HOME'},{s:196,e:224,act:'Baby bath',loc:'HOME'},{s:224,e:252,act:'Nappy change',loc:'HOME'},{s:252,e:280,act:'Tummy time supervision',loc:'HOME'},{s:280,e:308,act:'Midday feed',loc:'HOME'},{s:308,e:336,act:'Rest — sleep when baby sleeps',loc:'HOME'},{s:336,e:364,act:'Pram walk',loc:'GARDEN'},{s:364,e:392,act:'Visitor time — Evelyn visits',loc:'HOME'},{s:392,e:420,act:'Afternoon feed',loc:'HOME'},{s:420,e:448,act:'Play time with A7DO',loc:'HOME'},{s:448,e:476,act:'Bath time',loc:'HOME'},{s:476,e:504,act:'Evening feed',loc:'HOME'},{s:504,e:532,act:'Bedtime routine',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}],
+    chin:[{s:0,e:93,act:'Sleeping (broken)',loc:'HOME'},{s:93,e:140,act:'Night support — nappy change',loc:'HOME'},{s:140,e:168,act:'Morning routine',loc:'HOME'},{s:168,e:196,act:'Makes breakfast for Lorraine',loc:'HOME'},{s:196,e:224,act:'Baby bath assistance',loc:'HOME'},{s:224,e:280,act:'Work from home',loc:'HOME'},{s:280,e:308,act:'Lunch + holds A7DO',loc:'HOME'},{s:308,e:336,act:'Work from home',loc:'HOME'},{s:336,e:364,act:'Pram walk with family',loc:'GARDEN'},{s:364,e:420,act:'Work from home',loc:'HOME'},{s:420,e:448,act:'A7DO play time',loc:'HOME'},{s:448,e:476,act:'Cook dinner',loc:'HOME'},{s:476,e:504,act:'Family dinner',loc:'HOME'},{s:504,e:532,act:'Bedtime story',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}]
+  };
+  if (a < 1.5) return {
+    a7do:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:168,act:'Wake + morning feed',loc:'HOME'},{s:168,e:196,act:'Breakfast — solid food',loc:'HOME'},{s:196,e:224,act:'Play — blocks and toys',loc:'HOME'},{s:224,e:280,act:'Garden exploration',loc:'GARDEN'},{s:280,e:308,act:'Snack',loc:'HOME'},{s:308,e:364,act:'Nap',loc:'HOME'},{s:364,e:392,act:'Lunch',loc:'HOME'},{s:392,e:420,act:'Park — ducks and swings',loc:'PARK'},{s:420,e:448,act:'Shops with Lorraine',loc:'SHOPS'},{s:448,e:476,act:'Bath time',loc:'HOME'},{s:476,e:504,act:'Dinner',loc:'HOME'},{s:504,e:560,act:'Sleeping',loc:'HOME'}],
+    lorr:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine + A7DO feed',loc:'HOME'},{s:196,e:224,act:'Breakfast together',loc:'HOME'},{s:224,e:280,act:'Garden play supervision',loc:'GARDEN'},{s:280,e:308,act:'Snack time',loc:'HOME'},{s:308,e:364,act:'Rest while A7DO naps',loc:'HOME'},{s:364,e:392,act:'Lunch',loc:'HOME'},{s:392,e:420,act:'Park — ducks and swings',loc:'PARK'},{s:420,e:448,act:'Shops',loc:'SHOPS'},{s:448,e:476,act:'Bath time',loc:'HOME'},{s:476,e:504,act:'Dinner',loc:'HOME'},{s:504,e:560,act:'Sleeping',loc:'HOME'}],
+    chin:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine',loc:'HOME'},{s:196,e:320,act:'Working',loc:'WORK'},{s:320,e:364,act:'Lunch break',loc:'WORK'},{s:364,e:448,act:'Working',loc:'WORK'},{s:448,e:476,act:'Commute home',loc:'LANE'},{s:476,e:504,act:'Family dinner',loc:'HOME'},{s:504,e:532,act:'Bedtime story',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}]
+  };
+  if (a < 3) return {
+    a7do:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:168,act:'Wake + breakfast',loc:'HOME'},{s:168,e:196,act:'Play — blocks and ball',loc:'HOME'},{s:196,e:252,act:'Garden — flowers and birds',loc:'GARDEN'},{s:252,e:308,act:'Park — ducks and swings',loc:'PARK'},{s:308,e:336,act:'Snack',loc:'HOME'},{s:336,e:392,act:'Nap',loc:'HOME'},{s:392,e:420,act:'Lunch',loc:'HOME'},{s:420,e:448,act:'China play — counting',loc:'HOME'},{s:448,e:476,act:'Shops with Lorraine',loc:'SHOPS'},{s:476,e:504,act:'Cafe — James visit',loc:'CAFE'},{s:504,e:532,act:'Bath time',loc:'HOME'},{s:532,e:560,act:'Bedtime story',loc:'HOME'}],
+    lorr:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine + A7DO breakfast',loc:'HOME'},{s:196,e:252,act:'Garden play',loc:'GARDEN'},{s:252,e:308,act:'Park walk',loc:'PARK'},{s:308,e:336,act:'Snack time',loc:'HOME'},{s:336,e:392,act:'Rest while A7DO naps',loc:'HOME'},{s:392,e:420,act:'Lunch',loc:'HOME'},{s:420,e:448,act:'Home — China plays with A7DO',loc:'HOME'},{s:448,e:476,act:'Shops',loc:'SHOPS'},{s:476,e:504,act:'Cafe — James visit',loc:'CAFE'},{s:504,e:532,act:'Bath + bedtime',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}],
+    chin:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine',loc:'HOME'},{s:196,e:320,act:'Working',loc:'WORK'},{s:320,e:364,act:'Lunch break',loc:'WORK'},{s:364,e:420,act:'Working',loc:'WORK'},{s:420,e:448,act:'Home — plays with A7DO',loc:'HOME'},{s:448,e:476,act:'Shops with family',loc:'SHOPS'},{s:476,e:504,act:'Cafe — James visit',loc:'CAFE'},{s:504,e:532,act:'Bath + bedtime story',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}]
+  };
+  if (a < 5) return {
+    a7do:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:168,act:'Wake + breakfast',loc:'HOME'},{s:168,e:196,act:'Get ready for nursery',loc:'HOME'},{s:196,e:224,act:'Walk to nursery',loc:'LANE'},{s:224,e:364,act:'Nursery — circle time, play, learn',loc:'NURSERY'},{s:364,e:392,act:'Walk home with Lorraine',loc:'LANE'},{s:392,e:420,act:'Lunch + quiet time',loc:'HOME'},{s:420,e:448,act:'Park — swings and slide',loc:'PARK'},{s:448,e:476,act:'Home learning — letters and numbers',loc:'HOME'},{s:476,e:504,act:'Bath time',loc:'HOME'},{s:504,e:532,act:'Dinner + bedtime story',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}],
+    lorr:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine + A7DO breakfast',loc:'HOME'},{s:196,e:224,act:'Walk to nursery',loc:'LANE'},{s:224,e:364,act:'Part-time work',loc:'WORK'},{s:364,e:392,act:'Nursery pickup',loc:'NURSERY'},{s:392,e:420,act:'Lunch with A7DO',loc:'HOME'},{s:420,e:448,act:'Park',loc:'PARK'},{s:448,e:476,act:'Home learning supervision',loc:'HOME'},{s:476,e:504,act:'Bath time',loc:'HOME'},{s:504,e:532,act:'Dinner + bedtime',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}],
+    chin:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine',loc:'HOME'},{s:196,e:320,act:'Working',loc:'WORK'},{s:320,e:364,act:'Lunch break',loc:'WORK'},{s:364,e:448,act:'Working',loc:'WORK'},{s:448,e:476,act:'Commute home',loc:'LANE'},{s:476,e:504,act:'Family dinner',loc:'HOME'},{s:504,e:532,act:'Bedtime story',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}]
+  };
+  if (a < 12) return {
+    a7do:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:168,act:'Wake + breakfast',loc:'HOME'},{s:168,e:196,act:'Get ready for school',loc:'HOME'},{s:196,e:224,act:'Walk to school',loc:'LANE'},{s:224,e:364,act:'School — lessons and lunch',loc:'PRIMARY'},{s:364,e:392,act:'Walk home',loc:'LANE'},{s:392,e:420,act:'Snack + homework',loc:'HOME'},{s:420,e:448,act:'Park — play with friends',loc:'PARK'},{s:448,e:476,act:'Dinner',loc:'HOME'},{s:476,e:504,act:'Bath + reading',loc:'HOME'},{s:504,e:532,act:'Bedtime story',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}],
+    lorr:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine + A7DO breakfast',loc:'HOME'},{s:196,e:224,act:'School run',loc:'LANE'},{s:224,e:364,act:'Working',loc:'WORK'},{s:364,e:392,act:'School pickup',loc:'PRIMARY'},{s:392,e:420,act:'Snack + homework help',loc:'HOME'},{s:420,e:448,act:'Park with A7DO',loc:'PARK'},{s:448,e:476,act:'Cook dinner',loc:'HOME'},{s:476,e:504,act:'Family dinner',loc:'HOME'},{s:504,e:532,act:'Bedtime routine',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}],
+    chin:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine',loc:'HOME'},{s:196,e:320,act:'Working',loc:'WORK'},{s:320,e:364,act:'Lunch break',loc:'WORK'},{s:364,e:448,act:'Working',loc:'WORK'},{s:448,e:476,act:'Commute home',loc:'LANE'},{s:476,e:504,act:'Family dinner',loc:'HOME'},{s:504,e:532,act:'Homework help + bedtime',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}]
+  };
+  if (a < 18) return {
+    a7do:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:168,act:'Wake + breakfast',loc:'HOME'},{s:168,e:196,act:'Get ready',loc:'HOME'},{s:196,e:224,act:'Walk to secondary school',loc:'LANE'},{s:224,e:364,act:'Secondary school — GCSE and A-levels',loc:'SECONDARY'},{s:364,e:392,act:'Walk home',loc:'LANE'},{s:392,e:448,act:'Study + homework',loc:'HOME'},{s:448,e:476,act:'Sports centre',loc:'SPORTS'},{s:476,e:504,act:'Dinner',loc:'HOME'},{s:504,e:532,act:'Study + reading',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}],
+    lorr:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine',loc:'HOME'},{s:196,e:320,act:'Working',loc:'WORK'},{s:320,e:364,act:'Lunch break',loc:'WORK'},{s:364,e:448,act:'Working',loc:'WORK'},{s:448,e:476,act:'Commute home',loc:'LANE'},{s:476,e:504,act:'Cook dinner',loc:'HOME'},{s:504,e:532,act:'Family time',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}],
+    chin:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine',loc:'HOME'},{s:196,e:320,act:'Working',loc:'WORK'},{s:320,e:364,act:'Lunch break',loc:'WORK'},{s:364,e:448,act:'Working',loc:'WORK'},{s:448,e:476,act:'Commute home',loc:'LANE'},{s:476,e:504,act:'Family dinner',loc:'HOME'},{s:504,e:532,act:'A-level support',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}]
+  };
+  return {
+    a7do:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:168,act:'Wake + breakfast',loc:'HOME'},{s:168,e:196,act:'Commute to university or work',loc:'LANE'},{s:196,e:364,act:a<23?'University lectures + study':'Research and PhD work',loc:'WORKPLACE'},{s:364,e:392,act:'Lunch break',loc:'WORKPLACE'},{s:392,e:448,act:a<23?'Study and seminars':'Research and writing',loc:'WORKPLACE'},{s:448,e:476,act:'Commute home',loc:'LANE'},{s:476,e:504,act:'Dinner',loc:'HOME'},{s:504,e:532,act:"Study and Sandy's Law research",loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}],
+    lorr:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine',loc:'HOME'},{s:196,e:320,act:'Working',loc:'WORK'},{s:320,e:364,act:'Lunch break',loc:'WORK'},{s:364,e:448,act:'Working',loc:'WORK'},{s:448,e:476,act:'Commute home',loc:'LANE'},{s:476,e:504,act:'Cook dinner',loc:'HOME'},{s:504,e:532,act:'Family time',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}],
+    chin:[{s:0,e:140,act:'Sleeping',loc:'HOME'},{s:140,e:196,act:'Morning routine',loc:'HOME'},{s:196,e:320,act:'Working',loc:'WORK'},{s:320,e:364,act:'Lunch break',loc:'WORK'},{s:364,e:448,act:'Working',loc:'WORK'},{s:448,e:476,act:'Commute home',loc:'LANE'},{s:476,e:504,act:'Family dinner',loc:'HOME'},{s:504,e:532,act:'Evening',loc:'HOME'},{s:532,e:560,act:'Sleeping',loc:'HOME'}]
+  };
+}
+
+function getCurrentEntry(schedule, dayTick) {
+  let current = schedule[0];
+  for (let i = 0; i < schedule.length; i++) {
+    if (dayTick >= schedule[i].s) current = schedule[i];
+    else break;
+  }
+  return current;
+}
+
+function tickToTime(s) {
+  const totalMin = Math.round(s * (24*60/560));
+  const h = Math.floor(totalMin/60)%24;
+  const m = totalMin%60;
+  return String(h).padStart(2,'0')+':'+String(m).padStart(2,'0');
+}
+
+function renderScheduleList(id, schedule, dayTick) {
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.innerHTML = schedule.map(e => {
+    const active = dayTick >= e.s && dayTick < e.e;
+    return '<div class="sched-item'+(active?' now':'')+'">'+
+      '<span class="sched-time">'+tickToTime(e.s)+'</span>'+
+      '<span class="sched-act'+(active?' now':'')+'">'+
+      (active?'&#9654; ':'')+e.act+'</span>'+
+      '<span class="sched-loc">'+e.loc+'</span></div>';
+  }).join('');
+}
+</script>
+
+<script>
+// ══════════════════════════════════════════════════════════════
+// WORLD DATA
+// ══════════════════════════════════════════════════════════════
+const WORLD_OBJECTS=[
+  ["OBJ_CRIB","Baby crib","Furniture","NODE_HOME_H8",1090,880,0.5,"Empty to Occupied"],
+  ["OBJ_ROCKING_CHAIR","Rocking chair","Furniture","NODE_HOME_H8",1089,879,0.5,"Available"],
+  ["OBJ_MOBILE","Crib mobile","Toy","NODE_HOME_H8",1090,880,1.5,"Spinning"],
+  ["OBJ_BOTTLE","Baby bottle","Object","NODE_HOME_H8",1090,880,0.9,"Full to Empty"],
+  ["OBJ_BOOK_01","Picture book","Book","NODE_HOME_H8",1086,878,1.2,"Available"],
+  ["OBJ_BOOK_02","Story book","Book","NODE_HOME_H8",1086,878,1.3,"Available"],
+  ["OBJ_TOY_BALL","Toy ball","Toy","NODE_HOME_H8",1090,879,0.1,"Available"],
+  ["OBJ_TOY_TEDDY","Teddy bear","Toy","NODE_HOME_H8",1090,880,0.6,"Available"],
+  ["OBJ_BATH","Bath","Bathroom","NODE_HOME_H8",1092,882,0.3,"Empty to Full"],
+  ["OBJ_TV","Television","Electronics","NODE_HOME_H8",1087,878,1.0,"Off to On"],
+  ["OBJ_LAPTOP","Laptop","Electronics","NODE_HOME_H8",1087,877,0.8,"Off to On"],
+  ["OBJ_PRAM","Pram","Transport","NODE_GARDEN",1090,875,0.5,"Available"],
+  ["OBJ_FLOWERS","Flower bed","Nature","NODE_GARDEN",1092,876,0.3,"Blooming"],
+  ["OBJ_SWING","Swing","Play equipment","NODE_PARK_PLAY",1210,790,1.5,"Available"],
+  ["OBJ_SLIDE","Slide","Play equipment","NODE_PARK_PLAY",1211,790,2.0,"Available"],
+  ["OBJ_DUCK_POND","Duck pond","Nature","NODE_PARK",1201,801,0.0,"Active"],
+  ["OBJ_DUCKS","Ducks","Animal","NODE_PARK",1201,801,0.1,"Swimming"],
+  ["OBJ_NURSERY_MAT","Play mat","Education","NODE_NURSERY",1300,750,0.1,"Available"],
+  ["OBJ_NURSERY_BOOKS","Nursery books","Education","NODE_NURSERY",1300,751,1.0,"Available"],
+  ["OBJ_HOSPITAL_BED","Hospital bed","Medical","NODE_HOSPITAL",0,0,0.5,"Occupied"],
+  ["OBJ_SCALES","Baby scales","Medical","NODE_HOSPITAL",2,0,0.8,"Available"],
+  ["OBJ_SCIENCE_LAB","Science lab","Education","NODE_SECONDARY",1500,650,0.8,"Available"],
+  ["OBJ_LIBRARY_BOOKS","Library books","Education","NODE_LIBRARY",1350,720,1.2,"Available"],
+  ["OBJ_SWIMMING_POOL","Swimming pool","Sport","NODE_SPORTS",1250,750,0.0,"Available"],
+  ["OBJ_BUS_STOP","Bus stop","Transport","NODE_LANE",1090,860,2.0,"Active"],
+  ["OBJ_CAFE_TABLE","Cafe table","Furniture","NODE_CAFE",1160,830,0.8,"Available"],
+  ["OBJ_MIRROR","Mirror","Sensory","NODE_HOME_H8",1091,881,1.5,"Available"],
+  ["OBJ_ALPHABET_BLOCKS","Alphabet blocks","Education","NODE_HOME_H8",1090,879,0.1,"Available"],
+  ["OBJ_BREAST_MILK","Breast milk","Food","NODE_HOME_H8",1090,880,0.9,"Available"],
+  ["OBJ_CAR","Family car","Transport","NODE_HOME_H8",1090,878,1.5,"Available"],
+];
+
+const CITY_NODES=[
+  ["NODE_HOSPITAL","Hospital","Medical",0.05,0.5,"Dr. Patel","Phase 1","Birth location"],
+  ["NODE_HOME_H8","Home H8","Residential",0.35,0.45,"Lorraine,China","Phase 1","Primary home"],
+  ["NODE_HOME_H1","Home H1","Residential",0.30,0.38,"Alexis,Evelyn","Phase 1","150m from H8"],
+  ["NODE_GARDEN","Garden","Outdoor",0.35,0.52,"All family","Phase 1","5m from home"],
+  ["NODE_LANE","BeenFore Lane","Street",0.35,0.60,"—","Phase 1","Main street"],
+  ["NODE_PARK","Park","Outdoor",0.52,0.65,"Alexis,Evelyn","Phase 1","110m from lane"],
+  ["NODE_PARK_PLAY","Playground","Outdoor",0.55,0.70,"Peers","Phase 1","50m from park"],
+  ["NODE_NURSERY","Nursery","Education",0.65,0.72,"Ms.Chen,Peers","Phase 3","Min age 3"],
+  ["NODE_PRIMARY","Primary School","Education",0.72,0.78,"Teachers,Peers","Phase 4","Min age 5"],
+  ["NODE_LIBRARY","Library","Education",0.68,0.75,"—","Phase 3","50m from primary"],
+  ["NODE_SPORTS","Sports Centre","Recreation",0.58,0.68,"James,Alexis","Phase 4","50m from park"],
+  ["NODE_SHOPS","Local Shops","Commercial",0.42,0.62,"—","Phase 1","60m from lane"],
+  ["NODE_CAFE","Local Cafe","Social",0.44,0.60,"James","Phase 1","10m from shops"],
+  ["NODE_SECONDARY","Secondary School","Education",0.80,0.82,"Teachers,Peers","Phase 5","Min age 11"],
+  ["NODE_SHOPPING","Shopping Centre","Commercial",0.88,0.85,"—","Phase 4","510m from lane"],
+  ["NODE_WORKPLACE","Workplace","Office",0.95,0.90,"—","Phase 7","Min age 18"],
+  ["NODE_CITY_CENTRE","City Centre","Urban",0.28,0.30,"—","Phase 4","1384m from home"],
+];
+
+const CITY_EDGES=[
+  ["NODE_HOME_H8","NODE_GARDEN",5,1],["NODE_HOME_H8","NODE_LANE",20,1],
+  ["NODE_HOME_H8","NODE_HOME_H1",150,2],["NODE_LANE","NODE_PARK",110,2],
+  ["NODE_LANE","NODE_SHOPS",60,1],["NODE_PARK","NODE_NURSERY",100,2],
+  ["NODE_NURSERY","NODE_PRIMARY",100,2],["NODE_PRIMARY","NODE_SECONDARY",100,2],
+  ["NODE_PRIMARY","NODE_LIBRARY",50,1],["NODE_PARK","NODE_SPORTS",50,1],
+  ["NODE_SHOPS","NODE_CAFE",10,1],["NODE_LANE","NODE_SHOPPING",510,10],
+  ["NODE_SHOPPING","NODE_WORKPLACE",200,4],
+];
+
+const PREGNANCY_SCHEDULE=[
+  [1,"T1","Fertilisation","Unaware","Implantation","Normal work schedule"],
+  [4,"T1","Embryo","Aware","Nausea begins","Reduced activity"],
+  [8,"T1","Embryo","Aware","Nausea peak","Reduced work"],
+  [12,"T1","Fetus","Aware","12-week scan","Scan day"],
+  [16,"T2","Fetus","Aware","Appetite increases","Normal + exercise"],
+  [20,"T2","Fetus","Aware","20-week scan","Scan day"],
+  [24,"T2","Fetus","Aware","Swelling feet","Feet up"],
+  [28,"T3","Fetus","Aware","Third trimester","Birth prep classes"],
+  [32,"T3","Fetus","Aware","32-week scan","Scan day"],
+  [36,"T3","Fetus","Aware","36-week check","Hospital tour"],
+  [40,"T3","Birth","Labour","Contractions","Hospital"],
+];
+
+const CANONICAL_EQUATIONS=[
+  ["EQ_AGE","Age","age=tick/(80x52)","tick",t=>age(t).toFixed(4)+"yr"],
+  ["EQ_C","Consciousness","C(t)=MIN(0.05+Week/3000,1.0)","Week",t=>C(t).toFixed(6)],
+  ["EQ_W","Wisdom","W(t)=0 if t<96000 else MIN(1,(t-96000)/64000)","tick",t=>W(t).toFixed(6)],
+  ["EQ_I","Identity","I(t)=MIN(0.65,t/74880x0.65) or MIN(1,...)","tick",t=>I_fn(t).toFixed(6)],
+  ["EQ_H","Height","H(t)=logistic prenatal to exponential postnatal","Week",t=>H(t).toFixed(2)+"cm"],
+  ["EQ_M","Mass","M(t)=logistic prenatal to exponential postnatal","Week",t=>M(t).toFixed(3)+"kg"],
+  ["EQ_HR","Heart Rate","HR=IF(Week<80,147-((Week-40)/40)x47,MAX(60,...))","Week",t=>HR(t)+"bpm"],
+  ["EQ_ATP","ATP Circadian","ATP(t)=MAX(0.2,1-0.001xMAX(0,(tick%800)-400))","tick",t=>ATP(t).toFixed(6)],
+  ["EQ_V","Vocabulary","V(t)=50000/(1+EXP(-0.05x(Week-156)))","Week",t=>V(t).toLocaleString()],
+  ["EQ_PRED","Pred Error","e(t)=MAX(0.05,EXP(-t/50000))","tick",t=>P_err(t).toFixed(6)],
+  ["EQ_SANDY","Sandy's Law","C(t)=FixedPoint(Phi(P,M,E,I,W,A,D))","7 layers",t=>C(t).toFixed(4)],
+  ["EQ_DIV","Divergence","Div=|Sigma-Z|/(Sigma+Z)","Sigma,Z",t=>getNP(t).div.toFixed(6)],
+  ["EQ_GATE","SafeToSpeak","IF(Div<=0.6,OPEN,GATED)","Div",t=>getNP(t).open?"OPEN":"GATED"],
+  ["EQ_SLEEP","Sleep","IsSleepTick=MOD(Tick,560)<373","tick",t=>isSleep(t)?"SLEEPING":"AWAKE"],
+  ["EQ_GRAM","Grammar","Stage 0-6 by age","age",t=>"Stage "+gramStage(t)+"/6"],
+  ["EQ_BREATH","Breath","B(t)=A(t)xsin(2pixf(t)xt)","A,f,t",t=>(0.25+0.02*(1-C(t))).toFixed(3)+"Hz"],
+  ["EQ_HEBB","Hebbian","DeltaW_ij=axf(E_k)xx_ixx_j","W,a,E,x",t=>"a=0.01"],
+  ["EQ_TD","TD(lambda)","d(t)=r(t)+gxV(s_{t+1})-V(s_t)","r,g,V",t=>"g=0.99"],
+  ["EQ_CCE","CCE Gate","C_gate=Eres/(Z+Ractive+DeltaE)","Eres,Z,R",t=>C(t)>=0.6?"OPEN":"FORMING"],
+  ["EQ_WISDOM_ACC","Wisdom Acc","W(t+1)=W(t)+eta_wx[l1xC50yr+l2xEthical]","W,eta,l",t=>"eta=0.01"],
+  ["EQ_C50YR","50yr Discount","C50yr=SUM g^n x E[outcome_n]","g,n",t=>"g=0.999"],
+  ["EQ_PLAN","Planning","V(s)=R(s)+gxmax_a V(T(s,a))","V,R,g",t=>I_fn(t).toFixed(4)],
+  ["EQ_BOND","Bond","bond(NPC,t+1)=bond+etax(quality-decay)","bond,eta",t=>"eta=0.01"],
+  ["EQ_EMOT","Emotion FSM","H(t+1)=H(t)+phixreward-chixpunishment","H,phi,chi",t=>"phi=chi=0.1"],
+  ["EQ_TOM","Theory of Mind","ToM_i(j)={B_j,D_j,E_j,I_j}","NPC obs",t=>t>=12480?"ACTIVE":"FORMING"],
+  ["EQ_NODE","Node Engine","NODE(t+1)=NODE(t)+activation_spreadxedges","nodes",t=>Math.min(50000,Math.round(V(t)*1.5)).toLocaleString()],
+  ["EQ_SLEEP_24","Sleep Engine","T_consol=800 SINGLE SOURCE","tick",t=>Math.floor(t/800)+" cycles"],
+  ["EQ_AGI_GATE","AGI Gate","All 6 conditions: C>=0.95 W>=0.80 I>=0.95 E>=0.90 M>=0.90 Integrity>=0.70","tick",t=>t>=AGI?"ACTIVE":"PENDING"],
+];
+
+const INTEGRATION_MAP=[
+  ["EQ_DNA_01","EQ_HEIGHT","Growth factor to height","Every 80 ticks","Critical"],
+  ["EQ_DNA_01","EQ_MASS","Growth factor to mass","Every 80 ticks","Critical"],
+  ["EQ_DNA_01","EQ_CONSCIOUSNESS","Maturity to C(t)","Every 80 ticks","Critical"],
+  ["EQ_SENS_06","EQ_ATTN_09","Sensory to attention","Every tick","Critical"],
+  ["EQ_ATTN_09","EQ_PRED_08","Attention to prediction","Every tick","Critical"],
+  ["EQ_PRED_08","EQ_EMOT_07","Prediction error to emotion","Every tick","High"],
+  ["EQ_PRED_08","EQ_MEM_15","Prediction error to memory","Every tick","High"],
+  ["EQ_EMOT_07","EQ_MOTOR_13","Emotion to motor","Every tick","High"],
+  ["EQ_EMOT_07","EQ_BREATH_01","Emotion to breath","Every tick","High"],
+  ["EQ_EMOT_07","EQ_HR","Emotion to HR","Every tick","High"],
+  ["EQ_MEM_15","EQ_PRED_08","LTM to prediction priors","Every tick","High"],
+  ["EQ_MEM_15","EQ_NODE_21","LTM to node activation","Every tick","High"],
+  ["EQ_SLEEP_24","EQ_MEM_15","Sleep to LTM consolidation","Every 800 ticks","Critical"],
+  ["EQ_MOTOR_13","EQ_HILL_14","Motor to muscle activation","Every tick","Critical"],
+  ["EQ_HILL_14","EQ_PHYS","Muscle to body movement","Every tick","Critical"],
+  ["EQ_HOME_25","EQ_MOTOR_13","Drive override to motor","Every tick","Critical"],
+  ["EQ_ATP_CIRC","EQ_HOME_25","ATP to fatigue drive","Every tick","Critical"],
+  ["EQ_LANG_12","EQ_NODE_21","Word learning to nodes","Every 10 ticks","High"],
+  ["EQ_NP_GATE","EQ_MOTOR_13","SafeToSpeak to vocal motor","Every tick","Critical"],
+  ["EQ_CCE","EQ_MOTOR_13","CCE gate to action","Every tick","Critical"],
+  ["EQ_WRLD_11","EQ_TOM_20","World to NPC model","Every tick","High"],
+  ["EQ_TOM_20","EQ_BOND_01","ToM to bond update","Every tick","High"],
+  ["EQ_BOND_01","EQ_EMOT_07","Bond to emotion","Every tick","High"],
+  ["EQ_COH_26","EQ_SANDY_21","Identity to Sandy's Law","Every 80 ticks","High"],
+  ["EQ_WISDOM_ACC","EQ_SANDY_21","Wisdom to Sandy's Law","Every 80 ticks","High"],
+  ["EQ_CONSCIOUSNESS","EQ_AGI_GATE","C(t)>=0.95 to AGI","Every 80 ticks","High"],
+  ["EQ_WISDOM_ACC","EQ_AGI_GATE","W(t)>=0.80 to AGI","Every 80 ticks","High"],
+  ["EQ_COH_26","EQ_AGI_GATE","I(t)>=0.95 to AGI","Every 80 ticks","High"],
+  ["EQ_EMOT_07","EQ_AGI_GATE","E(t)>=0.90 to AGI","Every 80 ticks","High"],
+  ["EQ_MEM_15","EQ_AGI_GATE","M(t)>=0.90 to AGI","Every 80 ticks","High"],
+];
+
+const GENESIS_ENGINES=[
+  ["EQ_DNA_01","DNA Loop Engine","Every 80 ticks","Critical","D(t+1)=D(t)+a*ActivationRate+b*GrowthFactor"],
+  ["EQ_HEIGHT","Height H(t)","Every 80 ticks","High","Logistic prenatal to exponential postnatal"],
+  ["EQ_MASS","Mass M(t)","Every 80 ticks","High","Logistic prenatal to exponential postnatal"],
+  ["EQ_CONSCIOUSNESS","Consciousness C(t)","Every tick","Critical","C(t)=MIN(0.05+Week/3000,1.0)"],
+  ["EQ_HR","Heart Rate HR(t)","Every tick","High","MAX(65,ROUND(147-((Week-40)/52)*47,0))"],
+  ["EQ_ATP_CIRC","ATP Circadian","Every tick","Critical","ATP(t)=max(0.2,1-0.001*max(0,(tick%800)-400))"],
+  ["EQ_VOCAB","Vocabulary V(t)","Every 80 ticks","High","50000/(1+exp(-0.05*(Week-156)))"],
+  ["EQ_WISDOM","Wisdom W(t)","Every 80 ticks","High","0 if tick<96000 else MIN(1,(tick-96000)/64000)"],
+  ["EQ_SENS_06","Sensory Integration","Every tick","Critical","I(t+1)=tau*(Touch+Smell+Sound+Light)"],
+  ["EQ_PRED_08","Prediction Engine","Every tick","Critical","e(t)=x(t)-x_hat(t)"],
+  ["EQ_ATTN_09","Attention Engine","Every tick","High","A(t)=a1*Intensity-b1*Distraction"],
+  ["EQ_EMOT_07","Emotion FSM","Every tick","High","H(t+1)=H(t)+phi*reward-chi*punishment"],
+  ["EQ_HOME_25","Homeostasis","Every tick","Critical","Drive(t+1)=Drive(t)+rate-satisfaction"],
+  ["EQ_MOTOR_13","Motor Command","Every tick","Critical","tau_des=M(theta)*theta_ddot+C+G+tau_stab"],
+  ["EQ_HILL_14","Hill Muscle Model","Every tick","High","F_m=A_m*F_max*f_length*f_velocity"],
+  ["EQ_LANG_12","Language Engine","Every 10 ticks","High","L(t+1)=L(t)+lambda*ExposureFreq*AttentionWeight"],
+  ["EQ_MEM_15","Memory Engine","Every tick","High","Power-law forgetting: m(t)=m_0*t^(-beta)"],
+  ["EQ_HEBB_16","Hebbian Learning","Every tick","High","DeltaW_ij=a*f(E_k)*x_i*x_j"],
+  ["EQ_TD_17","TD(lambda) Learning","Every tick","High","d(t)=r(t)+g*V(s_{t+1})-V(s_t)"],
+  ["EQ_WISDOM_18","Wisdom Engine","Every 80 ticks","Medium","W(t+1)=W(t)+eta_w*[l1*C50yr+l2*Ethical]"],
+  ["EQ_TOM_20","Theory of Mind","Every 10 ticks","High","ToM_i(j)={B_j,D_j,E_j,I_j}"],
+  ["EQ_NODE_21","Node Engine","Every tick","High","NODE(t+1)=NODE(t)+activation_spread*edges"],
+  ["EQ_SYMB_23","Symbolisation","Every 10 ticks","Medium","Symbol=f(percept,word,context)"],
+  ["EQ_SLEEP_24","Sleep Engine","Every 800 ticks","Critical","T_consol=800 SINGLE SOURCE"],
+  ["EQ_COH_26","Coherence Engine","Every tick","High","IC(t)=1-Var(I,last_1000_ticks)"],
+  ["EQ_BREATH_01","Breathing Engine","Every tick","High","B(t)=A(t)*sin(2pi*f(t)*t)"],
+  ["EQ_CCE_04","CCE Gate","Every tick","Critical","C_gate=Eres/(Z+Ractive+DeltaE)"],
+  ["EQ_SANDY_21","Sandy's Law","Every 80 ticks","High","C(t)=FixedPoint(Phi(P,M,E,I,W,A,D))"],
+  ["EQ_NP_GATE","Neural Physics","Every tick","Critical","Div<=0.6 SafeToSpeak OPEN"],
+  ["EQ_AGI_GATE","AGI Gate","Every 80 ticks","High","All 6 conditions must be met"],
+  ["EQ_PHASE_TRANS","Phase Transition","Every 80 ticks","Critical","Fire PHASE_TRANSITION event"],
+  ["EQ_WRLD_11","World Model","Every 10 ticks","High","W(t+1)=W(t)+a*ResourceChange"],
+];
+
+const PCSN_SYSTEMS={
+  "Prediction (14)":[
+    ["Predictive Engine","EQ_PRED_08","e(t)=x(t)-x_hat(t)"],
+    ["Free Energy Min","EQ_FREE_ENERGY","F=E[log q(z)-log p(x,z)]"],
+    ["Predictive Coding","EQ_PRED_CODING","e_l=x_l-g(mu_{l+1})"],
+    ["Kalman Filter","EQ_KALMAN","s(t+1)=Kalman(s_pred,o(t+1))"],
+    ["Bayesian Perception","EQ_BAYESIAN","P(state|obs) proportional to P(obs|state)*P(state)"],
+    ["Object Permanence","EQ_OBJ_PERM","C_i(t)=C0*exp(-lambda*(t-t_lastSeen))"],
+    ["Motor Efference Copy","EQ_EFFERENCE","x_hat(t+1)=f_fwd(theta(t),A(t))"],
+    ["Dream Replay","EQ_SLEEP_24","x_dream(t) from P(x|memory,prior)"],
+    ["NPC Behaviour","EQ_TOM_20","B_j(t+1)=B_j(t)+eta*(obs-B_j(t))"],
+    ["Sandy's Law Pred","EQ_SANDY_21","I_pred(t)=predict(I(t-1),context(t))"],
+    ["Emotion Prediction","EQ_EMOT_07","E_pred(t)=f(context,memory,NPC)"],
+    ["World Model Update","EQ_WRLD_11","W(t+1)=W(t)+a*ResourceChange"],
+    ["Attention Prediction","EQ_ATTN_09","A_pred(t)=f(salience,goals,memory)"],
+    ["Language Prediction","EQ_LANG_12","L_pred(t)=P(next_word|context)"],
+  ],
+  "Choice (14)":[
+    ["Planning Engine","EQ_PLAN_02","V(s)=R(s)+g*max_a V(T(s,a))"],
+    ["Deliberation","EQ_DELIB","Decision=argmax(Value-Cost)"],
+    ["SOAR Subgoaling","EQ_SOAR","prio(g)=drive_strength*urgency*W(t)"],
+    ["Action Selection","EQ_CCE_04","u_intent=argmax[(V/R)*C_gate-Ecost]"],
+    ["Neural Physics Gate","EQ_NP_GATE","IF Div(t)<=0.6 THEN OPEN ELSE GATED"],
+    ["Emotion-Action","EQ_EMOT_07","action=select(emotion,urgency,values)"],
+    ["Value System","EQ_VALUES","V^{t+1}=V^t+eta*(R_long-R_short)"],
+    ["Ethics Engine","EQ_ETHICS","M(a)=-a*H(a)+b*F(a)+g*w_social"],
+    ["Social Strategy","EQ_SOC","Strategy=argmax(SocialOutcome|NPC_model)"],
+    ["Identity Choice","EQ_IDENT","I(t+1)=merge(I(t),new_fragment(choice))"],
+    ["Grammar Choice","EQ_GRAM","utterance=select(grammar_stage,intent)"],
+    ["Attention Choice","EQ_ATTN_09","A_choice=argmax(salience*goal_relevance)"],
+    ["Memory Choice","EQ_MEM_15","recall=select(relevance,recency,emotion)"],
+    ["Sleep Choice","EQ_SLEEP_24","sleep=IF(ATP<0.2 OR tick%800<373,SLEEP)"],
+  ],
+  "Story (14)":[
+    ["Narrative Identity","EQ_NARR","N(t)=narrative(M_ep(t),I(t),W(t))"],
+    ["Autobiographical Mem","EQ_AUTOBIO","imp(E_k)=w_R*R_k+w_E*E_k+w_V*V_k"],
+    ["Episodic Memory","EQ_EPISODIC","E_i=(S_i,A_i,T_i,U_i)"],
+    ["Memory Reconstruction","EQ_RECON","recall=reconstruct(fragments,context)"],
+    ["Causal World Engine","EQ_CAUSAL","consequence=f(action,world,NPCs)"],
+    ["NPC Story Arcs","EQ_NPC_ARC","NPC_state(t+1)=f(NPC_state(t),A7DO_action)"],
+    ["Daily Life Story","EQ_DAILY","Schedule(t)=f(Phase,Age,NPCs,World)"],
+    ["Writer Engine","EQ_WRITER","output=prosody(grammar(semantics(intent)))"],
+    ["Real Diary Entries","EQ_DIARY","auto_diary() life-stage narrative"],
+    ["Sandy's Law Narration","EQ_SANDY_21","N(t)=narrate(DeltaI,I(t),M(t))"],
+    ["Grammar Story","EQ_GRAM","utterance=grammar_stage(intent,context)"],
+    ["MindPath Story","EQ_MINDPATH","Path=argmax(A+M+E+I-R)"],
+    ["Dream Story","EQ_SLEEP_24","dream=reconstruct(episodic,prior)"],
+    ["Wisdom Story","EQ_WISDOM_18","W_story=narrate(W(t),C50yr,ethics)"],
+  ],
+  "Nodes (14)":[
+    ["Concept Nodes","EQ_NODE_21","NODE(t+1)=NODE(t)+activation_spread*edges"],
+    ["Memory Graph","EQ_MEM_GRAPH","G=(V,E) concept+semantic edges"],
+    ["Consciousness Graph","EQ_CONS_GRAPH","G=(V,E) living self-updating graph"],
+    ["Skill Graph","EQ_SKILL","M(s,t+1)=M(s,t)+eta*Exposure*(1-M)"],
+    ["Reasoning Graph","EQ_REASON","ReasoningChain=path(premise,rules,conclusion)"],
+    ["Semantic Memory","EQ_SEMANTIC","Concept=0.40*V+0.25*A+0.20*T+0.10*M+0.05*E"],
+    ["NPC Network","EQ_BOND_01","bond(NPC,t+1)=bond+eta*(quality-decay)"],
+    ["World Nodes","EQ_WRLD_11","World_Node={id,type,position,properties}"],
+    ["MindPath Nodes","EQ_MINDPATH","Path=argmax(A(n)+M(n)+E(n)+I(n)-R(n))"],
+    ["Word-Object Binding","EQ_LANG_12","B(word,obj)=a*visual+b*motor+g*emotion"],
+    ["Identity Nodes","EQ_IDENT","I_node={personality,values,goals,narrative}"],
+    ["Emotion Nodes","EQ_EMOT_07","E_node={valence,arousal,label,trigger}"],
+    ["Prediction Nodes","EQ_PRED_08","P_node={prior,likelihood,posterior}"],
+    ["Wisdom Nodes","EQ_WISDOM_18","W_node={insight,C50yr,ethical_score}"],
+  ],
+};
+
+const NPCS=[
+  {name:"Lorraine",role:"Mother",dob:"1989-03-14",age:37.2,h:180.54,m:65,hr:72,bond:0.95,color:"var(--lorr)",notes:"Postpartum recovery"},
+  {name:"China",role:"Father",dob:"1987-11-02",age:38.6,h:185.85,m:80,hr:68,bond:0.85,color:"var(--chin)",notes:"New parent"},
+  {name:"Alexis",role:"Aunt",dob:"1989-08-20",age:36.8,h:173.46,m:62,hr:70,bond:0.60,color:"#9b59b6",notes:"Healthy adult female"},
+  {name:"Evelyn",role:"Grandmother",dob:"1962-05-10",age:64.1,h:168.15,m:68,hr:75,bond:0.55,color:"#e67e22",notes:"Mild arthritis"},
+  {name:"James",role:"Uncle",dob:"1985-03-22",age:41.2,h:182.31,m:82,hr:70,bond:0.40,color:"#27ae60",notes:"Active lifestyle"},
+  {name:"Olivia",role:"Cousin",dob:"2002-11-15",age:23.6,h:177,m:60,hr:68,bond:0.35,color:"#f39c12",notes:"University student"},
+  {name:"Peer 1",role:"School Peer",dob:"~2023",age:3.4,h:95,m:16,hr:105,bond:0.30,color:"#95a5a6",notes:"Healthy toddler"},
+  {name:"Ms. Chen",role:"Teacher",dob:"~1995",age:30.2,h:165,m:58,hr:72,bond:0.45,color:"#3498db",notes:"Professional"},
+  {name:"Dr. Patel",role:"Paediatrician",dob:"~1975",age:50.9,h:175,m:78,hr:70,bond:0.30,color:"#e74c3c",notes:"Medical professional"},
+  {name:"Grandma Rose",role:"Pat. Grandmother",dob:"~1958",age:67.5,h:162,m:70,hr:78,bond:0.35,color:"#e91e8c",notes:"Elderly"},
+];
+
+const WRITING_SAMPLES=[
+  [0,"Newborn","[cry] [cry] [cry]","Stage 1","Distress"],
+  [3200,"Infant","mama! up! more!","Stage 2","Joy"],
+  [6400,"Toddler","ball! duck! China count!","Stage 2-3","Excited"],
+  [12480,"Child","I want ball. Mama come. Duck go pond.","Stage 3-4","Happy"],
+  [49920,"Adolescent","I think that learning is important because it helps me understand the world.","Stage 5-6","Engaged"],
+  [74880,"Young Adult","The relationship between consciousness and identity suggests that self-awareness emerges from recursive prediction.","Stage 6","Curious"],
+  [96000,"PhD","Sandy's Law proposes that consciousness C(t) is the fixed point of a 7-layer recursive function Phi(P,M,E,I,W,A,D).","Stage 6","Focused"],
+  [160000,"Post-PhD","I have learned that wisdom is not the accumulation of knowledge but the capacity to hold uncertainty with grace.","Stage 6","Serene"],
+];
+
+// ══════════════════════════════════════════════════════════════
+// MAP
+// ══════════════════════════════════════════════════════════════
+function getNodeKeyFromLoc(loc){
+  const map={HOSPITAL:'NODE_HOSPITAL',HOME:'NODE_HOME_H8',GARDEN:'NODE_GARDEN',LANE:'NODE_LANE',PARK:'NODE_PARK',NURSERY:'NODE_NURSERY',PRIMARY:'NODE_PRIMARY',SECONDARY:'NODE_SECONDARY',LIBRARY:'NODE_LIBRARY',SPORTS:'NODE_SPORTS',SHOPS:'NODE_SHOPS',CAFE:'NODE_CAFE',WORKPLACE:'NODE_WORKPLACE',SHOPPING:'NODE_SHOPPING'};
+  for(const[k,v]of Object.entries(map)){if(loc.includes(k))return v;}
+  return 'NODE_HOME_H8';
+}
+
+function drawMap(canvas,a7doLoc,lorrLoc,chinLoc){
+  const ctx=canvas.getContext('2d');
+  const W2=canvas.width=canvas.offsetWidth;
+  const H2=canvas.height=360;
+  ctx.clearRect(0,0,W2,H2);
+  ctx.strokeStyle='rgba(26,58,92,0.2)';ctx.lineWidth=1;
+  for(let x=0;x<W2;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,H2);ctx.stroke();}
+  for(let y=0;y<H2;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(W2,y);ctx.stroke();}
+  const nodeMap={};
+  const typeColor={Education:'#f39c12',Outdoor:'#27ae60',Medical:'#e74c3c',Social:'#e67e22',Recreation:'#3498db'};
+  CITY_NODES.forEach(n=>{nodeMap[n[0]]={x:n[3]*W2,y:n[4]*H2,color:typeColor[n[2]]||'#7a9cc0'};});
+  CITY_EDGES.forEach(([a,b])=>{
+    const na=nodeMap[a],nb=nodeMap[b];if(!na||!nb)return;
+    ctx.beginPath();ctx.moveTo(na.x,na.y);ctx.lineTo(nb.x,nb.y);
+    ctx.strokeStyle='rgba(26,58,92,0.9)';ctx.lineWidth=1.5;ctx.stroke();
+  });
+  const a7doKey=getNodeKeyFromLoc(a7doLoc);
+  const lorrKey=getNodeKeyFromLoc(lorrLoc);
+  const chinKey=getNodeKeyFromLoc(chinLoc);
+  CITY_NODES.forEach(([id,name])=>{
+    const n=nodeMap[id];if(!n)return;
+    const isA7DO=id===a7doKey;
+    if(isA7DO){ctx.beginPath();ctx.arc(n.x,n.y,18,0,Math.PI*2);ctx.fillStyle='rgba(0,212,255,0.12)';ctx.fill();}
+    ctx.beginPath();ctx.arc(n.x,n.y,isA7DO?12:8,0,Math.PI*2);
+    ctx.fillStyle=isA7DO?'rgba(0,212,255,0.9)':n.color+'88';ctx.fill();
+    ctx.strokeStyle=isA7DO?'#00d4ff':n.color;ctx.lineWidth=isA7DO?2.5:1.5;ctx.stroke();
+    ctx.font=(isA7DO?'bold ':'')+' 8px Segoe UI';ctx.fillStyle=isA7DO?'#00d4ff':'#7a9cc0';
+    ctx.textAlign='center';ctx.fillText(name,n.x,n.y+19);
+    if(isA7DO){ctx.font='bold 8px serif';ctx.fillStyle='#000';ctx.fillText('A',n.x,n.y+3);}
+  });
+  const ln=nodeMap[lorrKey]||nodeMap['NODE_HOME_H8'];
+  ctx.beginPath();ctx.arc(ln.x+9,ln.y-9,6,0,Math.PI*2);ctx.fillStyle='rgba(233,30,140,0.9)';ctx.fill();
+  ctx.font='bold 6px Segoe UI';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.fillText('L',ln.x+9,ln.y-6);
+  const cn=nodeMap[chinKey]||nodeMap['NODE_HOME_H8'];
+  ctx.beginPath();ctx.arc(cn.x-9,cn.y-9,6,0,Math.PI*2);ctx.fillStyle='rgba(30,144,255,0.9)';ctx.fill();
+  ctx.font='bold 6px Segoe UI';ctx.fillStyle='#fff';ctx.textAlign='center';ctx.fillText('C',cn.x-9,cn.y-6);
+  [['#00d4ff','A7DO'],['#e91e8c','Lorraine'],['#1e90ff','China']].forEach(([c,l],i)=>{
+    ctx.fillStyle=c;ctx.fillRect(7,7+i*13,8,8);ctx.fillStyle='#c8d8f0';ctx.font='8px Segoe UI';ctx.textAlign='left';ctx.fillText(l,18,14+i*13);
+  });
+}
+
+// ══════════════════════════════════════════════════════════════
+// RENDER FUNCTIONS
+// ══════════════════════════════════════════════════════════════
+function renderObjects(a7doLoc){
+  const nodeKey=getNodeKeyFromLoc(a7doLoc);
+  const nearby=WORLD_OBJECTS.filter(o=>o[3]===nodeKey);
+  const nearbyEl=document.getElementById('obj-nearby');
+  if(nearbyEl)nearbyEl.innerHTML='<div class="sh" style="color:var(--accent2)">Objects at '+nodeKey+' ('+nearby.length+')</div>'+
+    nearby.map(o=>'<div class="obj-item" style="border-left:2px solid var(--accent2)"><div class="obj-name">'+o[1]+'</div><div class="obj-loc">'+o[2]+' | X:'+o[4]+' Y:'+o[5]+' Z:'+o[6]+'</div><div class="obj-state" style="color:var(--accent2)">'+o[7]+'</div></div>').join('');
+  const allEl=document.getElementById('obj-all');
+  if(allEl)allEl.innerHTML=WORLD_OBJECTS.map(o=>'<div class="obj-item"><div class="obj-name">'+o[1]+'</div><div class="obj-loc">'+o[3].replace('NODE_','')+'</div><div class="obj-state">'+o[7]+'</div></div>').join('');
+}
+
+function renderCityMap(a7doLoc){
+  const nodeKey=getNodeKeyFromLoc(a7doLoc);
+  const nodesEl=document.getElementById('city-nodes-list');
+  if(nodesEl)nodesEl.innerHTML=CITY_NODES.map(([id,name,type,nx,ny,npcs,phase,notes])=>{
+    const here=id===nodeKey;
+    return '<div class="city-item" style="'+(here?'background:rgba(0,212,255,0.06);border-radius:3px;padding:2px 4px;':'')+'">'+
+      '<span class="city-id">'+id+'</span>'+
+      '<span class="city-name" style="'+(here?'color:var(--accent);font-weight:700;':'')+'">'+name+(here?' HERE':'')+'</span>'+
+      '<span class="city-type">'+type+'</span>'+
+      '<span class="city-phase">'+phase+'</span>'+
+      '<span class="city-notes">'+notes+'</span></div>';
+  }).join('');
+  const edgesEl=document.getElementById('city-edges-list');
+  if(edgesEl)edgesEl.innerHTML=CITY_EDGES.map(([a,b,dist,walk])=>
+    '<div class="city-item"><span class="city-id">'+a.replace('NODE_','')+'</span><span style="color:var(--text2)">to</span><span class="city-name">'+b.replace('NODE_','')+'</span><span class="city-type">'+dist+'m</span><span class="city-phase">'+walk+'min walk</span></div>'
+  ).join('');
+}
+
+function renderPregnancy(t){
+  const w=wk(t);
+  const statusEl=document.getElementById('preg-status');
+  if(statusEl){
+    if(t<BIRTH){
+      const tri=w<13?'T1 — Nausea, fatigue':w<27?'T2 — Energy returning, bump visible':'T3 — Nesting, birth prep';
+      statusEl.innerHTML='<div class="thought">Week '+Math.round(w)+'/40 — '+tri+'</div>';
+    }else{
+      statusEl.innerHTML='<div class="thought" style="border-color:var(--accent2)">A7DO born at Tick 3200 (Week 40) — Age now '+age(t).toFixed(2)+'yr</div>';
+    }
+  }
+  const el=document.getElementById('preg-list');
+  if(el)el.innerHTML=PREGNANCY_SCHEDULE.map(([week,tri,stage,state,physical,sched])=>{
+    const current=t<BIRTH&&Math.abs(wk(t)-week)<4;
+    return '<div class="preg-item" style="'+(current?'background:rgba(233,30,140,0.08);border-radius:3px;padding:2px 4px;':'')+'">'+
+      '<span class="preg-week">Wk'+week+(current?' NOW':'')+'</span>'+
+      '<span class="preg-tri">'+tri+'</span>'+
+      '<span class="preg-stage">'+stage+'</span>'+
+      '<span class="preg-state">'+physical+'</span>'+
+      '<span class="preg-sched">'+sched+'</span></div>';
+  }).join('');
+}
+
+function renderEquations(t){
+  const el=document.getElementById('eq-grid');
+  if(!el)return;
+  el.innerHTML=CANONICAL_EQUATIONS.map(([id,name,formula,vars,valFn])=>{
+    const val=valFn(t);
+    return '<div class="eq-item"><div class="eq-id">'+id+'</div><div class="eq-name">'+name+'</div><div class="eq-formula">'+formula+'</div><div class="eq-val">'+val+'</div></div>';
+  }).join('');
+}
+
+function renderIntegration(){
+  const el=document.getElementById('int-list');
+  if(!el)return;
+  el.innerHTML=INTEGRATION_MAP.map(([src,tgt,flow,rate,prio])=>
+    '<div class="int-item"><span class="int-src">'+src+'</span><span style="color:var(--text2)">to</span><span class="int-tgt">'+tgt+'</span><span class="int-flow">'+flow+'</span><span class="int-rate">'+rate+' | '+prio+'</span></div>'
+  ).join('');
+}
+
+function renderPCSN(t){
+  const el=document.getElementById('pcsn-pillars');
+  if(!el)return;
+  const colors={'Prediction (14)':'var(--pred)','Choice (14)':'var(--choi)','Story (14)':'var(--stor)','Nodes (14)':'var(--node)'};
+  el.innerHTML=Object.entries(PCSN_SYSTEMS).map(([pillar,systems])=>
+    '<div class="pcsn-pillar"><div class="pcsn-title" style="color:'+colors[pillar]+'">'+pillar+'</div>'+
+    systems.map(([name,eng,eq])=>'<div class="pcsn-item"><span class="pcsn-name">'+name+'</span><span class="pcsn-eq">'+eq+'</span></div>').join('')+
+    '</div>'
+  ).join('');
+}
+
+function renderEngines(){
+  const el=document.getElementById('eng-list');
+  if(!el)return;
+  el.innerHTML=GENESIS_ENGINES.map(([id,name,rate,prio,formula])=>
+    '<div class="eng-item"><span class="eng-id">'+id+'</span><span class="eng-name">'+name+'</span><span class="eng-rate">'+rate+'</span><span class="eng-prio '+prio.toLowerCase()+'">'+prio+'</span></div>'
+  ).join('');
+}
+
+function renderNPCs(){
+  const el=document.getElementById('npc-grid');
+  if(!el)return;
+  el.innerHTML=NPCS.map(npc=>'<div class="npc-card" style="border-left:3px solid '+npc.color+'">'+
+    '<div class="npc-name" style="color:'+npc.color+'">'+npc.name+' <span style="font-size:8px;color:var(--text2);font-weight:400">'+npc.role+'</span></div>'+
+    '<div class="npc-stat"><span class="npc-stat-l">DOB</span><span class="npc-stat-v">'+npc.dob+'</span></div>'+
+    '<div class="npc-stat"><span class="npc-stat-l">Height</span><span class="npc-stat-v">'+npc.h+'cm</span></div>'+
+    '<div class="npc-stat"><span class="npc-stat-l">Mass</span><span class="npc-stat-v">'+npc.m+'kg</span></div>'+
+    '<div class="npc-stat"><span class="npc-stat-l">HR</span><span class="npc-stat-v">'+npc.hr+'bpm</span></div>'+
+    '<div class="npc-stat"><span class="npc-stat-l">Bond</span><span class="npc-stat-v" style="color:'+(npc.bond>0.7?'var(--accent2)':npc.bond>0.4?'var(--warn)':'var(--text2)')+'">'+Math.round(npc.bond*100)+'%</span></div>'+
+    '<div class="npc-stat"><span class="npc-stat-l">Notes</span><span class="npc-stat-v" style="font-size:7px">'+npc.notes+'</span></div>'+
+    '</div>').join('');
+}
+
+function renderWritingSamples(t){
+  const el=document.getElementById('writing-samples');
+  if(!el)return;
+  el.innerHTML=WRITING_SAMPLES.map(([tick_s,stage,text,gram,emotion])=>{
+    const near=Math.abs(t-tick_s)<6400;
+    return '<div class="sample-item" style="'+(near?'border-color:var(--accent);':'')+'">'+
+      '<div class="sample-stage" style="'+(near?'color:var(--accent);':'')+'">'+stage+' (Tick '+tick_s.toLocaleString()+')'+(near?' NOW':'')+'</div>'+
+      '<div class="sample-text">"'+text+'"</div>'+
+      '<div class="sample-meta">Grammar: '+gram+' | Emotion: '+emotion+'</div></div>';
+  }).join('');
+}
+
+// ══════════════════════════════════════════════════════════════
+// CHARTS
+// ══════════════════════════════════════════════════════════════
+const baseOpts={responsive:true,maintainAspectRatio:true,plugins:{legend:{labels:{color:'#7a9cc0',font:{size:8}}}},scales:{x:{ticks:{color:'#7a9cc0',font:{size:7},maxTicksLimit:6},grid:{color:'rgba(26,58,92,0.4)'}},y:{ticks:{color:'#7a9cc0',font:{size:8}},grid:{color:'rgba(26,58,92,0.4)'}}}};
+let charts={};
+function initCharts(){
+  const mk=(id,type,data,opts={})=>{const el=document.getElementById(id);if(!el)return null;return new Chart(el,{type,data,options:{...baseOpts,...opts}});};
+  charts.growth=mk('chart-growth','line',{labels:[],datasets:[{label:'H cm',data:[],borderColor:'#00d4ff',tension:0.4,pointRadius:0,yAxisID:'y'},{label:'M kg',data:[],borderColor:'#00ff9d',tension:0.4,pointRadius:0,yAxisID:'y1'}]},{scales:{x:{ticks:{color:'#7a9cc0',font:{size:7},maxTicksLimit:6},grid:{color:'rgba(26,58,92,0.4)'}},y:{ticks:{color:'#7a9cc0',font:{size:8}},grid:{color:'rgba(26,58,92,0.4)'}},y1:{position:'right',ticks:{color:'#7a9cc0',font:{size:8}},grid:{drawOnChartArea:false}}}});
+  charts.cog=mk('chart-cog','line',{labels:[],datasets:[{label:'C(t)',data:[],borderColor:'#2980b9',tension:0.4,pointRadius:0},{label:'W(t)',data:[],borderColor:'#00ff9d',tension:0.4,pointRadius:0},{label:'I(t)',data:[],borderColor:'#8e44ad',tension:0.4,pointRadius:0}]},{scales:{x:{ticks:{color:'#7a9cc0',font:{size:7},maxTicksLimit:6},grid:{color:'rgba(26,58,92,0.4)'}},y:{min:0,max:1,ticks:{color:'#7a9cc0',font:{size:8}},grid:{color:'rgba(26,58,92,0.4)'}}}});
+  charts.pred=mk('chart-pred','line',{labels:[],datasets:[{label:'Pred Error',data:[],borderColor:'#2980b9',backgroundColor:'rgba(41,128,185,0.1)',tension:0.4,pointRadius:0,fill:true}]},{scales:{x:{ticks:{color:'#7a9cc0',font:{size:7},maxTicksLimit:6},grid:{color:'rgba(26,58,92,0.4)'}},y:{min:0,max:1,ticks:{color:'#7a9cc0',font:{size:8}},grid:{color:'rgba(26,58,92,0.4)'}}}});
+  charts.pcsn=mk('chart-pcsn','line',{labels:[],datasets:[{label:'Pred(1-err)',data:[],borderColor:'#2980b9',tension:0.4,pointRadius:0},{label:'Choice',data:[],borderColor:'#8e44ad',tension:0.4,pointRadius:0},{label:'Story',data:[],borderColor:'#27ae60',tension:0.4,pointRadius:0},{label:'Nodes',data:[],borderColor:'#c0392b',tension:0.4,pointRadius:0}]},{scales:{x:{ticks:{color:'#7a9cc0',font:{size:7},maxTicksLimit:6},grid:{color:'rgba(26,58,92,0.4)'}},y:{min:0,max:1,ticks:{color:'#7a9cc0',font:{size:8}},grid:{color:'rgba(26,58,92,0.4)'}}}});
+  charts.hm=mk('chart-hm','line',{labels:[],datasets:[{label:'Height cm',data:[],borderColor:'#00d4ff',tension:0.4,pointRadius:0},{label:'Mass kg',data:[],borderColor:'#00ff9d',tension:0.4,pointRadius:0}]},{scales:{x:{ticks:{color:'#7a9cc0',font:{size:7},maxTicksLimit:6},grid:{color:'rgba(26,58,92,0.4)'}},y:{ticks:{color:'#7a9cc0',font:{size:8}},grid:{color:'rgba(26,58,92,0.4)'}}}});
+  charts.hr=mk('chart-hr','line',{labels:[],datasets:[{label:'HR bpm',data:[],borderColor:'#ff6b35',backgroundColor:'rgba(255,107,53,0.1)',tension:0.4,pointRadius:0,fill:true}]},{scales:{x:{ticks:{color:'#7a9cc0',font:{size:7},maxTicksLimit:6},grid:{color:'rgba(26,58,92,0.4)'}},y:{ticks:{color:'#7a9cc0',font:{size:8}},grid:{color:'rgba(26,58,92,0.4)'}}}});
+}
+
+// ══════════════════════════════════════════════════════════════
+// EXPORT FUNCTIONS
+// ══════════════════════════════════════════════════════════════
+function downloadFile(content,filename,type){
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([content],{type}));
+  a.download=filename;a.click();
+}
+function showPreview(content){
+  const el=document.getElementById('export-preview');
+  if(el)el.textContent=content.substring(0,3000)+(content.length>3000?'\n...(truncated)':'');
+}
+function exportJSON(){
+  const t=tick;const{open,div}=getNP(t);
+  const scheds=getSchedules(t);const dt=t%560;
+  const a7doEntry=getCurrentEntry(scheds.a7do,dt);
+  const lorrEntry=getCurrentEntry(scheds.lorr,dt);
+  const chinEntry=getCurrentEntry(scheds.chin,dt);
+  const snap={tick:t,age_yr:+age(t).toFixed(4),week:+wk(t).toFixed(1),phase:getPhase(t),stage:getStage(t),
+    a7do_activity:a7doEntry.act,a7do_location:a7doEntry.loc,
+    lorraine_activity:lorrEntry.act,lorraine_location:lorrEntry.loc,
+    china_activity:chinEntry.act,china_location:chinEntry.loc,
+    C_t:+C(t).toFixed(6),W_t:+W(t).toFixed(6),I_t:+I_fn(t).toFixed(6),
+    H_cm:+H(t).toFixed(2),M_kg:+M(t).toFixed(3),HR_bpm:HR(t),
+    ATP:+ATP(t).toFixed(6),vocab:V(t),pred_error:+P_err(t).toFixed(6),
+    np_gate:open?'OPEN':'GATED',divergence:+div.toFixed(6),
+    grammar_stage:gramStage(t),is_sleep:isSleep(t),
+    story_events:Math.floor(t/100),active_nodes:Math.min(50000,Math.round(V(t)*1.5)),
+    sleep_cycles:Math.floor(t/800),thought:getThought(t)};
+  const content=JSON.stringify(snap,null,2);
+  downloadFile(content,'a7do_tick_'+t+'.json','application/json');
+  showPreview(content);
+}
+function exportEquationsCSV(){
+  const rows=['Eq_ID,Name,Formula,Variables,Status,Live_Value'];
+  CANONICAL_EQUATIONS.forEach(([id,name,formula,vars,valFn])=>{
+    rows.push([id,name,'"'+formula+'"',vars,'VERIFIED',valFn(tick)].join(','));
+  });
+  const content=rows.join('\n');
+  downloadFile(content,'equations.csv','text/csv');showPreview(content);
+}
+function exportCityJSON(){
+  const graph={nodes:CITY_NODES.map(([id,name,type,nx,ny,npcs,phase,notes])=>({id,name,type,x:nx,y:ny,npcs,phase,notes})),
+    edges:CITY_EDGES.map(([a,b,dist,walk])=>({from:a,to:b,distance_m:dist,walk_min:walk}))};
+  const content=JSON.stringify(graph,null,2);
+  downloadFile(content,'city_graph.json','application/json');showPreview(content);
+}
+function exportObjectsCSV(){
+  const rows=['Object_ID,Name,Type,Node,X,Y,Z,State'];
+  WORLD_OBJECTS.forEach(o=>rows.push(o.join(',')));
+  const content=rows.join('\n');
+  downloadFile(content,'world_objects.csv','text/csv');showPreview(content);
+}
+function exportNPCCSV(){
+  const rows=['Name,Role,DOB,Age_at_Birth,Height_cm,Mass_kg,HR_bpm,Bond,Notes'];
+  NPCS.forEach(n=>rows.push([n.name,n.role,n.dob,n.age,n.h,n.m,n.hr,n.bond,n.notes].join(',')));
+  const content=rows.join('\n');
+  downloadFile(content,'npcs.csv','text/csv');showPreview(content);
+}
+function exportEnginesJSON(){
+  const engines=GENESIS_ENGINES.map(([id,name,rate,prio,formula])=>({id,name,tick_rate:rate,priority:prio,formula}));
+  const content=JSON.stringify(engines,null,2);
+  downloadFile(content,'genesis_engines.json','application/json');showPreview(content);
+}
+function exportIntegrationCSV(){
+  const rows=['Source_Engine,Target_Engine,Data_Flow,Tick_Rate,Priority'];
+  INTEGRATION_MAP.forEach(r=>rows.push(r.join(',')));
+  const content=rows.join('\n');
+  downloadFile(content,'integration_map.csv','text/csv');showPreview(content);
+}
+function exportPythonCode(){
+  const t=tick;
+  const content='import math\nTPW=80\ndef wk(t): return t/TPW\ndef age(t): return t/(TPW*52)\ndef C(t): return min(1.0,0.05+wk(t)/3000)\ndef W(t): return 0 if t<96000 else min(1.0,(t-96000)/64000)\ndef H(t):\n    w=wk(t)\n    if w<=40: return min(50,50/(1+math.exp(-0.2*(w-20))))\n    return min(177,50+(177-50)*(1-math.exp(-0.005*(w-40))))\ndef M(t):\n    w=wk(t)\n    if w<=40: return min(3.5,3.5/(1+math.exp(-0.2*(w-20))))\n    return min(70,3.5+(70-3.5)*(1-math.exp(-0.004*(w-40))))\ndef HR(t):\n    w=wk(t)\n    if w<80: return round(147-((w-40)/40)*47)\n    return max(60,round(100-((w-80)/1000)*35))\ndef ATP(t): return max(0.2,1-0.001*max(0,(t%800)-400))\ndef V(t): return min(262144,round(50000/(1+math.exp(-0.05*(wk(t)-40-156)))))\ndef P_err(t): return max(0.05,math.exp(-t/50000))\n# At tick '+t+': C='+C(t).toFixed(4)+' W='+W(t).toFixed(4)+' H='+H(t).toFixed(1)+'cm M='+M(t).toFixed(2)+'kg HR='+HR(t)+'bpm\n';
+  downloadFile(content,'a7do_equations.py','text/plain');showPreview(content);
+}
+function exportScheduleCSV(){
+  const scheds=getSchedules(tick);
+  const rows=['Person,Start_Tick,End_Tick,Time_Start,Activity,Location'];
+  ['a7do','lorr','chin'].forEach(person=>{
+    scheds[person].forEach(e=>{
+      rows.push([person,e.s,e.e,tickToTime(e.s),'"'+e.act+'"',e.loc].join(','));
+    });
+  });
+  const content=rows.join('\n');
+  downloadFile(content,'schedule.csv','text/csv');showPreview(content);
+}
+
+// ══════════════════════════════════════════════════════════════
+// MAIN UPDATE LOOP
+// ══════════════════════════════════════════════════════════════
+function updateAll(){
+  const t=tick;
+  const c=C(t),w=W(t),i=I_fn(t),h=H(t),m=M(t),hr=HR(t),atp=ATP(t);
+  const vocab=V(t),pred=P_err(t);
+  const{open,div}=getNP(t);
+  const phase=getPhase(t),stage=getStage(t);
+  const a=age(t),wkn=wk(t).toFixed(0);
+  const gram=gramStage(t),sl=isSleep(t);
+  const story=Math.floor(t/100),nodes=Math.min(50000,Math.round(vocab*1.5+story*0.5+i*1000));
+  const dayTick=t%560;
+
+  // Get schedule-driven activities
+  const scheds=getSchedules(t);
+  const a7doEntry=getCurrentEntry(scheds.a7do,dayTick);
+  const lorrEntry=getCurrentEntry(scheds.lorr,dayTick);
+  const chinEntry=getCurrentEntry(scheds.chin,dayTick);
+
+  const label=a>0?a.toFixed(1)+'yr':wkn+'wk';
+  const push=(arr,val)=>{arr.push(val);if(arr.length>MAX_HIST)arr.shift();};
+  if(hist.ticks.length===0||label!==hist.ticks[hist.ticks.length-1]){
+    push(hist.ticks,label);push(hist.c,c);push(hist.w,w);push(hist.h,h);push(hist.m,m);
+    push(hist.hr,hr);push(hist.pred,pred);push(hist.vocab,vocab);push(hist.atp,atp);
+  }
+
+  // Header
+  document.getElementById('h-tick').textContent=t.toLocaleString();
+  document.getElementById('h-age').textContent=a.toFixed(2)+'yr';
+  document.getElementById('h-phase').textContent=phase;
+  document.getElementById('h-act').textContent=a7doEntry.act.substring(0,18);
+  document.getElementById('h-loc').textContent=a7doEntry.loc;
+  document.getElementById('h-c').textContent=c.toFixed(3);
+  const hg=document.getElementById('h-gate');hg.textContent=open?'OPEN':'GATED';hg.style.color=open?'var(--accent2)':'var(--warn)';
+  document.getElementById('h-hr').textContent=hr;
+  document.getElementById('h-atp').textContent=atp.toFixed(3);
+
+  // Sidebar
+  document.getElementById('s-tick').textContent=t.toLocaleString();
+  document.getElementById('s-age').textContent=a.toFixed(2)+'yr';
+  document.getElementById('s-week').textContent=wkn;
+  document.getElementById('s-phase').textContent=phase;
+  document.getElementById('s-stage').textContent=stage;
+  document.getElementById('s-activity').textContent=a7doEntry.act;
+  document.getElementById('s-loc').textContent=a7doEntry.loc;
+  document.getElementById('s-c').textContent=c.toFixed(4);
+  document.getElementById('s-w').textContent=w.toFixed(4);
+  document.getElementById('s-i').textContent=i.toFixed(4);
+  document.getElementById('s-h').textContent=h.toFixed(1)+'cm';
+  document.getElementById('s-m').textContent=m.toFixed(2)+'kg';
+  document.getElementById('s-hr').textContent=hr+'bpm';
+  document.getElementById('s-atp').textContent=atp.toFixed(3);
+  document.getElementById('s-vocab').textContent=vocab.toLocaleString();
+  const sg=document.getElementById('s-gate');sg.textContent=open?'OPEN':'GATED';sg.style.color=open?'var(--accent2)':'var(--warn)';
+  document.getElementById('s-pred').textContent=pred.toFixed(4);
+  document.getElementById('s-gram').textContent='Stage '+gram;
+  document.getElementById('s-sleep').textContent=sl?'Sleeping':'Awake';
+  document.getElementById('s-daytick').textContent=dayTick+'/560';
+  document.getElementById('s-lorr').textContent=lorrEntry.act.substring(0,20);
+  document.getElementById('s-chin').textContent=chinEntry.act.substring(0,20);
+
+  // World tab
+  document.getElementById('w-act').textContent=a7doEntry.act;
+  document.getElementById('w-loc').textContent=a7doEntry.loc;
+  document.getElementById('w-lorr-act').textContent=lorrEntry.act;
+  document.getElementById('w-lorr-loc').textContent=lorrEntry.loc;
+  document.getElementById('w-chin-act').textContent=chinEntry.act;
+  document.getElementById('w-chin-loc').textContent=chinEntry.loc;
+  document.getElementById('w-daytick').textContent=dayTick;
+  document.getElementById('w-c').textContent=c.toFixed(4);
+  document.getElementById('w-hr').textContent=hr;
+  document.getElementById('world-thought').textContent=getThought(t);
+
+  // Schedule tab
+  document.getElementById('sch-a7do-act').textContent=a7doEntry.act;
+  document.getElementById('sch-a7do-loc').textContent=a7doEntry.loc;
+  document.getElementById('sch-lorr-act').textContent=lorrEntry.act;
+  document.getElementById('sch-lorr-loc').textContent=lorrEntry.loc;
+  document.getElementById('sch-chin-act').textContent=chinEntry.act;
+  document.getElementById('sch-chin-loc').textContent=chinEntry.loc;
+  document.getElementById('sch-daytick').textContent=dayTick;
+  renderScheduleList('sched-a7do',scheds.a7do,dayTick);
+  renderScheduleList('sched-lorr',scheds.lorr,dayTick);
+  renderScheduleList('sched-chin',scheds.chin,dayTick);
+
+  // Cognition tab
+  document.getElementById('cog-c').textContent=c.toFixed(4);
+  document.getElementById('cog-w').textContent=w.toFixed(4);
+  document.getElementById('cog-i').textContent=i.toFixed(4);
+  const cg=document.getElementById('cog-gate');cg.textContent=open?'OPEN':'GATED';cg.style.color=open?'var(--accent2)':'var(--warn)';
+  document.getElementById('cog-vocab').textContent=vocab.toLocaleString();
+  document.getElementById('cog-gram').textContent='Stage '+gram;
+  document.getElementById('cog-thought').textContent=getThought(t);
+
+  // PCSN tab
+  document.getElementById('pcsn-pred').textContent=pred.toFixed(3);
+  const pg=document.getElementById('pcsn-gate');pg.textContent=open?'OPEN':'GATED';pg.style.color=open?'var(--accent2)':'var(--warn)';
+  document.getElementById('pcsn-stor').textContent=story.toLocaleString();
+  document.getElementById('pcsn-node').textContent=nodes.toLocaleString();
+  document.getElementById('pcsn-thought').textContent=getThought(t);
+
+  // Body tab
+  document.getElementById('body-h').textContent=h.toFixed(1)+'cm';
+  document.getElementById('body-m').textContent=m.toFixed(2)+'kg';
+  document.getElementById('body-hr').textContent=hr+'bpm';
+  document.getElementById('body-atp').textContent=atp.toFixed(3);
+  document.getElementById('body-br').textContent=(0.25+0.02*(1-c)).toFixed(3)+'Hz';
+  document.getElementById('body-sleep').textContent=sl?'Sleeping':'Awake';
+
+  // Export snapshot
+  const snapEl=document.getElementById('export-snapshot');
+  if(snapEl)snapEl.innerHTML='<strong>Tick '+t.toLocaleString()+'</strong> | Age '+a.toFixed(2)+'yr | '+stage+' | '+phase+' | A7DO: '+a7doEntry.act+' at '+a7doEntry.loc;
+
+  // Charts
+  const upd=(ch,datasets)=>{if(!ch)return;ch.data.labels=hist.ticks;datasets.forEach((d,i)=>{ch.data.datasets[i].data=d;});ch.update('none');};
+  upd(charts.growth,[hist.h,hist.m]);
+  upd(charts.cog,[hist.c,hist.w,hist.c.map((_,idx)=>Math.min(0.65,idx/hist.c.length*0.65))]);
+  upd(charts.pred,[hist.pred]);
+  upd(charts.pcsn,[hist.pred.map(v=>1-v),hist.c.map(v=>Math.min(1,v*1.1)),hist.vocab.map(v=>Math.min(1,v/50000)),hist.c.map(v=>Math.min(1,v*1.5))]);
+  upd(charts.hm,[hist.h,hist.m]);
+  upd(charts.hr,[hist.hr]);
+
+  // Map
+  const canvas=document.getElementById('map-canvas');
+  if(canvas)drawMap(canvas,a7doEntry.loc,lorrEntry.loc,chinEntry.loc);
+
+  // Active tab updates
+  const activePanel=document.querySelector('.panel.active');
+  if(activePanel){
+    const id=activePanel.id;
+    if(id==='panel-objects')renderObjects(a7doEntry.loc);
+    if(id==='panel-citymap')renderCityMap(a7doEntry.loc);
+    if(id==='panel-pregnancy')renderPregnancy(t);
+    if(id==='panel-equations')renderEquations(t);
+    if(id==='panel-cognition')renderWritingSamples(t);
+  }
+}
+
+// ══════════════════════════════════════════════════════════════
+// CONTROLS
+// ══════════════════════════════════════════════════════════════
+function toggleRun(){
+  running=!running;
+  document.getElementById('btn-run').textContent=running?'&#9646;&#9646; Pause':'&#9654; Run';
+  if(running)simInterval=setInterval(()=>{tick+=speed;updateAll();},50);
+  else clearInterval(simInterval);
+}
+function resetSim(){
+  running=false;clearInterval(simInterval);tick=0;
+  document.getElementById('btn-run').textContent='&#9654; Run';
+  hist={ticks:[],c:[],w:[],h:[],m:[],hr:[],pred:[],vocab:[],atp:[]};
+  updateAll();
+}
+function jumpTo(t){tick=t;updateAll();}
+function updateSpeed(v){
+  speed=parseInt(v);
+  document.getElementById('speed-val').textContent=v+'x';
+  if(running){clearInterval(simInterval);simInterval=setInterval(()=>{tick+=speed;updateAll();},50);}
+}
+function showTab(name,event){
+  document.querySelectorAll('.tab').forEach(t=>t.classList.remove('active'));
+  document.querySelectorAll('.panel').forEach(p=>p.classList.remove('active'));
+  if(event)event.target.classList.add('active');
+  document.getElementById('panel-'+name).classList.add('active');
+  // Render static content on first show
+  if(name==='npcs')renderNPCs();
+  if(name==='integration')renderIntegration();
+  if(name==='pcsn')renderPCSN(tick);
+  if(name==='engines')renderEngines();
+  if(name==='objects')renderObjects(getCurrentEntry(getSchedules(tick).a7do,tick%560).loc);
+  if(name==='citymap')renderCityMap(getCurrentEntry(getSchedules(tick).a7do,tick%560).loc);
+  if(name==='pregnancy')renderPregnancy(tick);
+  if(name==='equations')renderEquations(tick);
+  if(name==='cognition')renderWritingSamples(tick);
+  updateAll();
+}
+
+// ══════════════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════════════
+initCharts();
+renderNPCs();
+renderIntegration();
+renderPCSN(0);
+renderEngines();
+setInterval(()=>{const c=document.getElementById('map-canvas');if(c){const scheds=getSchedules(tick);const dt=tick%560;drawMap(c,getCurrentEntry(scheds.a7do,dt).loc,getCurrentEntry(scheds.lorr,dt).loc,getCurrentEntry(scheds.chin,dt).loc);}},100);
+updateAll();
+</script>
+</body>
+</html>
